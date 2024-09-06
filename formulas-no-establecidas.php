@@ -19,8 +19,8 @@ if (!isset($_SESSION['user_id'])) {
     <?php include 'layouts/title-meta.php'; ?>
 
     <!-- Plugin css -->
-    <link rel="stylesheet" href="assets/vendor/daterangepicker/daterangepicker.css">
-    <link href="assets/vendor/admin-resources/jquery.vectormap/jquery-jvectormap-1.2.2.css" rel="stylesheet" type="text/css" />
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.9.1/jquery-ui.min.js"></script>
 
     <?php include 'layouts/head-css.php'; ?>
 </head>
@@ -47,10 +47,11 @@ if (!isset($_SESSION['user_id'])) {
                                             <form>
                                                 <div class="mb-12">
                                                     <label for="simpleinput" class="form-label">Activo:</label>
-                                                    <input type="text" class="form-control" id="formula" name="formula"
+                                                    <input type="text" class="form-control" id="activo" name="activo"
+                                                    onkeyup="buscarActivo(this.value)"
                                                     placeholder="Ingrese el nombre del activo" autocomplete="off">
                                                 </div>
-                                            
+                                                <div id="resultados-activos" style="float:left;"></div>                                           
 
                                         </div>
                                         <div class="col-lg-6">
@@ -63,7 +64,7 @@ if (!isset($_SESSION['user_id'])) {
                                         <div class="col-lg-6">
                                             <div class="mb-3">
                                                 <label for="unidad" class="form-label">Unidad:</label>
-                                                <select class="form-select" id="example-select" name="unidad">
+                                                <select class="form-select" id="unidad" name="unidad">
                                                     <option value=""></option>
                                                     <option value="g">g</option>
                                                     <option value="mg">mg</option>
@@ -71,6 +72,9 @@ if (!isset($_SESSION['user_id'])) {
                                                     <option value="UI">UI</option>
                                                 </select>
                                             </div>
+                                        </div>
+                                        <div class="col-lg-12">
+                                            <button type="button" class="btn btn-primary" onclick="agregarFila()">Añadir</button>
                                         </div>
                                         
                                     </form>
@@ -87,7 +91,7 @@ if (!isset($_SESSION['user_id'])) {
                             <div class="card">
                                 <div class="card-body">
                                     <h4 class="header-title">Activos Seleccionados</h4>
-                                    <table id="state-saving-datatable" class="table activate-select dt-responsive nowrap w-100">
+                                    <table id="tablaFormula" class="table activate-select dt-responsive nowrap w-100">
                                         <thead>
                                             <tr>
                                                 <th>#</th>
@@ -126,6 +130,69 @@ if (!isset($_SESSION['user_id'])) {
 
     </div>
     <!-- END wrapper -->
+    <script>
+        function buscarActivo(valor) {
+            $.ajax({
+                type: "POST",
+                url: "buscar-producto.php",
+                data: { producto: valor },  // Pasar el valor ingresado
+                success: function (data) {
+                    if (data == "") {
+                        $('#resultados-activos').fadeOut(500);
+                    } else {
+                        $('#resultados-activos').fadeIn(500).html(data);
+                        $('.suggest-element').click(function () {
+                            var nombreSeleccionado = $(this).data('cod_odoo');
+                            $('#activo').val($(this).text());
+                            $('#resultados-activos').fadeOut(100);
+                        });
+                    }
+                }
+            });
+        }
+
+
+        function seleccionarActivo(nombre) {
+            console.log("Seleccionado activo:", nombre); // Verifica si seleccionas correctamente
+            document.getElementById("activo").value = nombre;
+            document.getElementById("resultados-activos").innerHTML = ""; // Limpiar los resultados después de seleccionar
+        }
+
+        function agregarFila() {
+            var activo = document.getElementById("activo").value;
+            var cant = document.getElementById("cant").value;
+            var unidad = document.getElementById("unidad").value;
+            
+            if (activo && cant && unidad) {
+                var tabla = document.getElementById("tablaFormula").getElementsByTagName('tbody')[0];
+                var nuevaFila = tabla.insertRow();
+
+                var celda1 = nuevaFila.insertCell(0);
+                var celda2 = nuevaFila.insertCell(1);
+                var celda3 = nuevaFila.insertCell(2);
+                var celda4 = nuevaFila.insertCell(3);
+                var celda5 = nuevaFila.insertCell(4);
+
+                celda1.innerHTML = tabla.rows.length;
+                celda2.innerHTML = activo;
+                celda3.innerHTML = cant;
+                celda4.innerHTML = unidad;
+                celda5.innerHTML = '<button class="btn btn-danger" onclick="eliminarFila(this)">X</button>';
+
+                // Limpiar los campos después de añadir la fila
+                document.getElementById("activo").value = "";
+                document.getElementById("cant").value = "";
+                document.getElementById("unidad").value = "";
+            } else {
+                alert("Por favor, complete todos los campos.");
+            }
+        }
+
+        function eliminarFila(boton) {
+            var fila = boton.parentNode.parentNode;
+            fila.parentNode.removeChild(fila);
+        }
+    </script>
 
     <?php include 'layouts/right-sidebar.php'; ?>
 

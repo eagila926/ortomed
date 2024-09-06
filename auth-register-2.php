@@ -1,4 +1,3 @@
-<?php include 'layouts/session.php'; ?>
 <?php include 'layouts/main.php'; ?>
 
 <head>

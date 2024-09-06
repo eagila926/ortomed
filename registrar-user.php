@@ -1,15 +1,3 @@
-<?php
-// Iniciar la sesión solo si no está ya iniciada
-if (session_status() == PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Verificar si el usuario ha iniciado sesión
-if (!isset($_SESSION['user_id'])) {
-    // Si no ha iniciado sesión, redirigir al formulario de login
-    header("Location: auth-login-2.php");
-    exit(); // Termina el script después de redirigir
-}
 ?>
 <!DOCTYPE html>
 <html lang="en" data-layout="topnav" data-menu-color="brand">
