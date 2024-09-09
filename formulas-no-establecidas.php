@@ -1,15 +1,21 @@
 <?php
-// Iniciar la sesión solo si no está ya iniciada
+// Iniciar la sesión si no está ya iniciada
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
 // Verificar si el usuario ha iniciado sesión
 if (!isset($_SESSION['user_id'])) {
-    // Si no ha iniciado sesión, redirigir al formulario de login
+    // Si no ha iniciado sesión, redirigir al login
     header("Location: auth-login-2.php");
-    exit(); // Termina el script después de redirigir
+    exit();
 }
+
+// Ahora puedes acceder a los datos de la sesión
+$user_id = $_SESSION['user_id'];
+$nombre = $_SESSION['nombre'];
+$apellido = $_SESSION['apellido'];
+
 ?>
 <!DOCTYPE html>
 <html lang="en" data-layout="topnav" data-menu-color="brand">
@@ -26,6 +32,10 @@ if (!isset($_SESSION['user_id'])) {
 </head>
 
 <body>
+    <script>
+        var user_id = <?php echo json_encode($user_id); ?>;
+        console.log("User ID:", user_id);
+    </script>
     <!-- Begin page -->
     <div class="wrapper">
 
@@ -54,6 +64,9 @@ if (!isset($_SESSION['user_id'])) {
                                                 <div id="resultados-activos" style="float:left;"></div>                                           
 
                                         </div>
+                                        <div class="col-lg-12">
+                                            <label for="text" id="minMaxLabel" class="form-label">Mínimo: ; Máximo: </label>
+                                        </div>
                                         <div class="col-lg-6">
                                             <div class="mb-6">
                                                     <label for="example-number" class="form-label">Cantidad:</label>
@@ -74,15 +87,21 @@ if (!isset($_SESSION['user_id'])) {
                                             </div>
                                         </div>
                                         <div class="col-lg-12">
-                                            <button type="button" class="btn btn-primary" onclick="agregarFila()">Añadir</button>
-                                        </div>
-                                        
+                                            <button type="button" class="btn btn-primary" onclick="agregarFila(); guardarBorrador();">Añadir</button>
+                                        </div>                                        
                                     </form>
                                         
                                     </div>
                                     
 
                                 </div> <!-- end card-->
+                                <div class="row" style="margin-top: 10px;">
+                                    <div class="col-lg-11"></div>
+                                    <div class="col-lg-1">
+                                            <button type="button" class="btn btn-success">Cotizar</button>
+                                    </div>
+                                </div>
+                                
                             </div> <!-- end col-->
                         </div>  
 
@@ -95,6 +114,7 @@ if (!isset($_SESSION['user_id'])) {
                                         <thead>
                                             <tr>
                                                 <th>#</th>
+                                                <th>Cod. Odoo</th>
                                                 <th>Activo</th>
                                                 <th>Cantidad</th>
                                                 <th>Unidad</th>
@@ -131,19 +151,30 @@ if (!isset($_SESSION['user_id'])) {
     </div>
     <!-- END wrapper -->
     <script>
+        
         function buscarActivo(valor) {
             $.ajax({
                 type: "POST",
                 url: "buscar-producto.php",
-                data: { producto: valor },  // Pasar el valor ingresado
+                data: { producto: valor },
                 success: function (data) {
                     if (data == "") {
                         $('#resultados-activos').fadeOut(500);
                     } else {
                         $('#resultados-activos').fadeIn(500).html(data);
                         $('.suggest-element').click(function () {
-                            var nombreSeleccionado = $(this).data('cod_odoo');
-                            $('#activo').val($(this).text());
+                            var codOdoo = $(this).data('cod_odoo');  // Capturar cod_odoo
+                            var nombreActivo = $(this).text();  // Capturar el nombre del activo
+                            var minimo = $(this).data('minimo');  // Capturar el valor mínimo
+                            var maximo = $(this).data('maximo');  // Capturar el valor máximo
+
+                            // Almacenar el cod_odoo en el input como un data attribute
+                            $('#activo').val(nombreActivo).data('cod_odoo', codOdoo);
+
+                            // Mostrar el valor mínimo y máximo en el label
+                            $('#minMaxLabel').text('Mínimo: ' + minimo + ' ; Máximo: ' + maximo);
+
+                            console.log("Código Odoo seleccionado:", codOdoo);
                             $('#resultados-activos').fadeOut(100);
                         });
                     }
@@ -160,29 +191,77 @@ if (!isset($_SESSION['user_id'])) {
 
         function agregarFila() {
             var activo = document.getElementById("activo").value;
+            var codOdoo = $('#activo').data('cod_odoo');  // Recuperar cod_odoo del input
             var cant = document.getElementById("cant").value;
             var unidad = document.getElementById("unidad").value;
-            
-            if (activo && cant && unidad) {
+
+            // Validar que todos los campos estén llenos
+            if (activo && cant && unidad && codOdoo) {
                 var tabla = document.getElementById("tablaFormula").getElementsByTagName('tbody')[0];
+                var filas = tabla.getElementsByTagName('tr');
+
+                // Verificar si el activo o cod_odoo ya está en la tabla
+                for (var i = 0; i < filas.length; i++) {
+                    var codOdooTabla = filas[i].cells[1].innerText;  // Asumimos que el Cod. Odoo está en la segunda columna
+                    var activoTabla = filas[i].cells[2].innerText;    // Asumimos que el Activo está en la tercera columna
+
+                    // Compara si ya existe el activo o el cod_odoo
+                    if (codOdoo === codOdooTabla || activo === activoTabla) {
+                        alert("El activo ya ha sido ingresado.");
+                        return;  // No agregar la fila
+                    }
+                }
+
+                // Si no existe, agregar la nueva fila
                 var nuevaFila = tabla.insertRow();
 
                 var celda1 = nuevaFila.insertCell(0);
-                var celda2 = nuevaFila.insertCell(1);
-                var celda3 = nuevaFila.insertCell(2);
-                var celda4 = nuevaFila.insertCell(3);
-                var celda5 = nuevaFila.insertCell(4);
+                var celda2 = nuevaFila.insertCell(1);  // Columna para Cod. Odoo
+                var celda3 = nuevaFila.insertCell(2);  // Columna para Activo
+                var celda4 = nuevaFila.insertCell(3);  // Columna para Cantidad
+                var celda5 = nuevaFila.insertCell(4);  // Columna para Unidad
+                var celda6 = nuevaFila.insertCell(5);  // Columna para botón Eliminar
 
                 celda1.innerHTML = tabla.rows.length;
-                celda2.innerHTML = activo;
-                celda3.innerHTML = cant;
-                celda4.innerHTML = unidad;
-                celda5.innerHTML = '<button class="btn btn-danger" onclick="eliminarFila(this)">X</button>';
+                celda2.innerHTML = codOdoo;  // Mostrar el código Odoo en la columna
+                celda3.innerHTML = activo;
+                celda4.innerHTML = cant;
+                celda5.innerHTML = unidad;
+                celda6.innerHTML = '<button class="btn btn-danger" onclick="eliminarFila(this)">X</button>';
+
+                // Llamar a la función guardarBorrador con los valores capturados
+                guardarBorrador(activo, codOdoo, cant, unidad);
 
                 // Limpiar los campos después de añadir la fila
                 document.getElementById("activo").value = "";
                 document.getElementById("cant").value = "";
                 document.getElementById("unidad").value = "";
+                $('#activo').data('cod_odoo', '');  // Limpiar el data attribute de cod_odoo
+            } else {
+                alert("Por favor, complete todos los campos.");
+            }
+        }
+
+
+        function guardarBorrador(activo, codOdoo, cant, unidad) {
+            if (activo && cant && unidad && codOdoo) {
+                $.ajax({
+                    type: "POST",
+                    url: "guardar_borrador.php",
+                    data: {
+                        activo: activo,
+                        codOdoo: codOdoo,
+                        cant: cant,
+                        unidad: unidad,
+                        idUsuario: user_id
+                    },
+                    success: function(response) {
+                        console.log("Datos guardados temporalmente: " + response);
+                    },
+                    error: function() {
+                        alert("Hubo un error al guardar los datos.");
+                    }
+                });
             } else {
                 alert("Por favor, complete todos los campos.");
             }
