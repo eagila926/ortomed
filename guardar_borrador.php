@@ -1,4 +1,6 @@
 <?php
+include 'layouts/config.php';
+
 // Iniciar la sesión si no está ya iniciada
 if (session_status() == PHP_SESSION_NONE) {
     session_start();
@@ -21,12 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
     $codOdoo = $_POST['codOdoo'];
     $cant = $_POST['cant'];
     $unidad = $_POST['unidad'];
-    $idUsuario = $_POST['user_id'];
     
     // Obtener las iniciales del nombre y apellido del usuario
-    $nombreUsuario = $nombre;  // Suponiendo que tienes el nombre en la sesión
-    $apellidoUsuario = $apellido;  // Suponiendo que tienes el apellido en la sesión
-    $iniciales = strtoupper($nombreUsuario[0] . $apellidoUsuario[0]);
+    $iniciales = strtoupper($nombre[0] . $apellido[0]);
 
     // Generar el código: iniciales + mes actual + . + número aleatorio
     $mes = date('m');
@@ -35,17 +34,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST') {
 
     // Insertar en la tabla formula_borrador
     $query = "INSERT INTO borrador_formulas (cot_formu, id_user, activo, cantidad, unidad) VALUES (?, ?, ?, ?, ?)";
-    $stmt = $pdo->prepare($query); 
+    $stmt = $pdo->prepare($query);
     
-    $stmt->bind_param("sisss", $codigo, $idUsuario, $activo, $cant, $unidad);
-
-    if ($stmt->execute()) {
+    // Ejecutar la consulta con los parámetros
+    if ($stmt->execute([$codigo, $user_id, $activo, $cant, $unidad])) {
         echo "Guardado correctamente";
     } else {
-        echo "Error: " . $conn->error;
+        echo "Error: " . $stmt->errorInfo()[2];
     }
-
-    $stmt->close();
-    $conn->close();
+    
+    // Cerrar la conexión
+    $stmt->closeCursor();
+    $pdo = null;
 }
 ?>

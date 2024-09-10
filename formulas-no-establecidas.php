@@ -98,7 +98,7 @@ $apellido = $_SESSION['apellido'];
                                 <div class="row" style="margin-top: 10px;">
                                     <div class="col-lg-11"></div>
                                     <div class="col-lg-1">
-                                            <button type="button" class="btn btn-success">Cotizar</button>
+                                        <button type="button" class="btn btn-success" onclick="abrirModal()">Cotizar</button>
                                     </div>
                                 </div>
                                 
@@ -147,6 +147,42 @@ $apellido = $_SESSION['apellido'];
         <!-- ============================================================== -->
         <!-- End Page content -->
         <!-- ============================================================== -->
+        
+        <!-- ============================================================== -->
+        <!-- Empieza Modal -->
+        <!-- ============================================================== -->
+        <!-- Modal para ingresar los días de tratamiento -->
+            <div class="modal fade" id="modalDiasTratamiento" tabindex="-1" role="dialog" aria-labelledby="modalDiasLabel" aria-hidden="true">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalDiasLabel">Ingrese los días del tratamiento</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="formDiasTratamiento">
+                    <div class="form-group">
+                        <label for="diasTratamiento">Número de días:</label>
+                        <input type="number" class="form-control" id="diasTratamiento" name="diasTratamiento" min="1" required>
+                    </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="guardarDiasTratamiento()">Guardar</button>
+                </div>
+                </div>
+            </div>
+            </div>
+
+
+
+        <!-- ============================================================== -->
+        <!-- Termina Modal -->
+        <!-- ============================================================== -->
+
 
     </div>
     <!-- END wrapper -->
@@ -189,88 +225,123 @@ $apellido = $_SESSION['apellido'];
             document.getElementById("resultados-activos").innerHTML = ""; // Limpiar los resultados después de seleccionar
         }
 
-        function agregarFila() {
-            var activo = document.getElementById("activo").value;
-            var codOdoo = $('#activo').data('cod_odoo');  // Recuperar cod_odoo del input
-            var cant = document.getElementById("cant").value;
-            var unidad = document.getElementById("unidad").value;
+        window.onload = function() {
+        mostrarActivos();
+    };
 
-            // Validar que todos los campos estén llenos
-            if (activo && cant && unidad && codOdoo) {
-                var tabla = document.getElementById("tablaFormula").getElementsByTagName('tbody')[0];
-                var filas = tabla.getElementsByTagName('tr');
+    // Función para agregar activos y almacenarlos en localStorage
+    function agregarFila() {
+        var activo = document.getElementById("activo").value;
+        var codOdoo = $('#activo').data('cod_odoo');  // Recuperar cod_odoo del input
+        var cant = document.getElementById("cant").value;
+        var unidad = document.getElementById("unidad").value;
 
-                // Verificar si el activo o cod_odoo ya está en la tabla
-                for (var i = 0; i < filas.length; i++) {
-                    var codOdooTabla = filas[i].cells[1].innerText;  // Asumimos que el Cod. Odoo está en la segunda columna
-                    var activoTabla = filas[i].cells[2].innerText;    // Asumimos que el Activo está en la tercera columna
+        // Validar que todos los campos estén llenos
+        if (activo && cant && unidad && codOdoo) {
+            var activos = JSON.parse(localStorage.getItem('activos')) || [];
 
-                    // Compara si ya existe el activo o el cod_odoo
-                    if (codOdoo === codOdooTabla || activo === activoTabla) {
-                        alert("El activo ya ha sido ingresado.");
-                        return;  // No agregar la fila
-                    }
-                }
+            // Verificar si el activo o codOdoo ya está en la tabla
+            var existe = activos.some(function(item) {
+                return item.codOdoo === codOdoo || item.activo === activo;
+            });
 
-                // Si no existe, agregar la nueva fila
-                var nuevaFila = tabla.insertRow();
-
-                var celda1 = nuevaFila.insertCell(0);
-                var celda2 = nuevaFila.insertCell(1);  // Columna para Cod. Odoo
-                var celda3 = nuevaFila.insertCell(2);  // Columna para Activo
-                var celda4 = nuevaFila.insertCell(3);  // Columna para Cantidad
-                var celda5 = nuevaFila.insertCell(4);  // Columna para Unidad
-                var celda6 = nuevaFila.insertCell(5);  // Columna para botón Eliminar
-
-                celda1.innerHTML = tabla.rows.length;
-                celda2.innerHTML = codOdoo;  // Mostrar el código Odoo en la columna
-                celda3.innerHTML = activo;
-                celda4.innerHTML = cant;
-                celda5.innerHTML = unidad;
-                celda6.innerHTML = '<button class="btn btn-danger" onclick="eliminarFila(this)">X</button>';
-
-                // Llamar a la función guardarBorrador con los valores capturados
-                guardarBorrador(activo, codOdoo, cant, unidad);
-
-                // Limpiar los campos después de añadir la fila
-                document.getElementById("activo").value = "";
-                document.getElementById("cant").value = "";
-                document.getElementById("unidad").value = "";
-                $('#activo').data('cod_odoo', '');  // Limpiar el data attribute de cod_odoo
-            } else {
-                alert("Por favor, complete todos los campos.");
+            if (existe) {
+                alert("El activo ya ha sido ingresado.");
+                return;  // No agregar si ya existe
             }
+
+            // Crear un objeto con los datos del activo
+            var nuevoActivo = {
+                activo: activo,
+                codOdoo: codOdoo,
+                cant: cant,
+                unidad: unidad
+            };
+
+            // Añadir el nuevo activo al array de activos
+            activos.push(nuevoActivo);
+
+            // Guardar en localStorage
+            localStorage.setItem('activos', JSON.stringify(activos));
+
+            // Mostrar los activos actualizados
+            mostrarActivos();
+
+            // Limpiar los campos después de añadir
+            document.getElementById("activo").value = "";
+            document.getElementById("cant").value = "";
+            document.getElementById("unidad").value = "";
+            $('#activo').data('cod_odoo', '');  // Limpiar el data attribute de cod_odoo
+        } else {
+            alert("Por favor, complete todos los campos.");
+        }
+    }
+
+    // Función para mostrar los activos almacenados en localStorage
+    function mostrarActivos() {
+        var activos = JSON.parse(localStorage.getItem('activos')) || [];
+        var tabla = document.getElementById("tablaFormula").getElementsByTagName('tbody')[0];
+
+        // Limpiar la tabla antes de volver a mostrar los activos
+        tabla.innerHTML = "";
+
+        // Recorrer los activos y añadir filas a la tabla
+        activos.forEach(function(activo, index) {
+            var nuevaFila = tabla.insertRow();
+
+            var celda1 = nuevaFila.insertCell(0);
+            var celda2 = nuevaFila.insertCell(1);  // Columna para Cod. Odoo
+            var celda3 = nuevaFila.insertCell(2);  // Columna para Activo
+            var celda4 = nuevaFila.insertCell(3);  // Columna para Cantidad
+            var celda5 = nuevaFila.insertCell(4);  // Columna para Unidad
+            var celda6 = nuevaFila.insertCell(5);  // Columna para botón Eliminar
+
+            celda1.innerHTML = index + 1;
+            celda2.innerHTML = activo.codOdoo;
+            celda3.innerHTML = activo.activo;
+            celda4.innerHTML = activo.cant;
+            celda5.innerHTML = activo.unidad;
+            celda6.innerHTML = '<button class="btn btn-danger" onclick="eliminarFila(' + index + ')">X</button>';
+        });
+    }
+
+    // Función para eliminar un activo de la tabla y de localStorage
+    function eliminarFila(index) {
+        var activos = JSON.parse(localStorage.getItem('activos')) || [];
+        activos.splice(index, 1);  // Eliminar el activo del array
+
+        // Actualizar localStorage
+        localStorage.setItem('activos', JSON.stringify(activos));
+
+        // Actualizar la tabla visualmente
+        mostrarActivos();
+    }
+
+    function abrirModal() {
+            // Abre el modal cuando se presiona el botón "Cotizar"
+            $('#modalDiasTratamiento').modal('show');
         }
 
+    function guardarDiasTratamiento() {
+        var dias = document.getElementById("diasTratamiento").value;
+            
+        if (dias) {
+            // Guardar el número de días en localStorage o enviarlo al servidor
+            localStorage.setItem('diasTratamiento', dias);
 
-        function guardarBorrador(activo, codOdoo, cant, unidad) {
-            if (activo && cant && unidad && codOdoo) {
-                $.ajax({
-                    type: "POST",
-                    url: "guardar_borrador.php",
-                    data: {
-                        activo: activo,
-                        codOdoo: codOdoo,
-                        cant: cant,
-                        unidad: unidad,
-                        idUsuario: user_id
-                    },
-                    success: function(response) {
-                        console.log("Datos guardados temporalmente: " + response);
-                    },
-                    error: function() {
-                        alert("Hubo un error al guardar los datos.");
-                    }
-                });
-            } else {
-                alert("Por favor, complete todos los campos.");
-            }
-        }
+            // Cerrar el modal
+            $('#modalDiasTratamiento').modal('hide');
+                
+            // Redirigir o realizar cualquier acción con los datos
 
-        function eliminarFila(boton) {
-            var fila = boton.parentNode.parentNode;
-            fila.parentNode.removeChild(fila);
+            console.log("Días de tratamiento guardados: " + dias);
+            location.href="resumen-formula.php";
+            
+        } else {
+            alert("Por favor, ingrese el número de días.");
         }
+    }
+
     </script>
 
     <?php include 'layouts/right-sidebar.php'; ?>
