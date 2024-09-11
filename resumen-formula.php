@@ -78,7 +78,36 @@ $apellido = $_SESSION['apellido'];
                                 </div> <!-- end card body-->
                             </div> <!-- end card -->
                         </div><!-- end col-->
-                    </div> <!-- end row-->                             
+                    </div> <!-- end row-->   
+                    
+                    <div class="row" style="margin-top: 10px;">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h4 class="header-title">Valores detallados por activo</h4>
+                                    <table id="tablaCalculos" class="table activate-select dt-responsive nowrap w-100">
+                                        <thead>
+                                            <tr>
+                                                <th>#</th>
+                                                <th>Cod. Odoo</th>
+                                                <th>Activo</th>
+                                                <th>Cantidad</th>
+                                                <th>Unidad</th>
+                                                <th>Cantidad en Gramos</th>
+                                                <th>Factor</th>
+                                                <th>Densidad</th>
+                                                <th>Masa Final g</th>
+                                                <th>Volumen</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                        </tbody>
+                                    </table>
+
+                                </div> <!-- end card body-->
+                            </div> <!-- end card -->
+                        </div><!-- end col-->
+                    </div> <!-- end row-->   
                 
                 </div>
                 <!-- container -->
@@ -116,28 +145,92 @@ $apellido = $_SESSION['apellido'];
         // Función para mostrar los activos almacenados en localStorage
         function mostrarActivos() {
             var activos = JSON.parse(localStorage.getItem('activos')) || [];
-            var tabla = document.getElementById("tablaFormula").getElementsByTagName('tbody')[0];
+            var tablaFormula = document.getElementById("tablaFormula").getElementsByTagName('tbody')[0];
+            var tablaCalculos = document.getElementById("tablaCalculos").getElementsByTagName('tbody')[0];
 
-            // Limpiar la tabla antes de volver a mostrar los activos
-            tabla.innerHTML = "";
+            // Limpiar las tablas antes de volver a mostrar los activos
+            tablaFormula.innerHTML = "";
+            tablaCalculos.innerHTML = "";
 
-            // Recorrer los activos y añadir filas a la tabla
+            // Recorrer los activos y añadir filas a ambas tablas
             activos.forEach(function(activo, index) {
-                var nuevaFila = tabla.insertRow();
+                // Añadir a tablaFormula
+                var nuevaFilaFormula = tablaFormula.insertRow();
+                nuevaFilaFormula.insertCell(0).innerHTML = index + 1;
+                nuevaFilaFormula.insertCell(1).innerHTML = activo.codOdoo;
+                nuevaFilaFormula.insertCell(2).innerHTML = activo.activo;
+                nuevaFilaFormula.insertCell(3).innerHTML = activo.cant;
+                nuevaFilaFormula.insertCell(4).innerHTML = activo.unidad;
 
-                var celda1 = nuevaFila.insertCell(0);
-                var celda2 = nuevaFila.insertCell(1);  // Columna para Cod. Odoo
-                var celda3 = nuevaFila.insertCell(2);  // Columna para Activo
-                var celda4 = nuevaFila.insertCell(3);  // Columna para Cantidad
-                var celda5 = nuevaFila.insertCell(4);  // Columna para Unidad
+                // Hacer una solicitud AJAX para obtener factor y densidad desde la base de datos
+                $.ajax({
+                    url: 'datos-activos.php',  // Archivo PHP que consulta los datos
+                    type: 'GET',
+                    data: { codOdoo: activo.codOdoo },
+                    dataType: 'json',
+                    success: function(data) {
+                        // Lógica para convertir cantidad a gramos según la unidad
+                        let cantidadEnGramos;
+                        switch (activo.unidad) {
+                            case 'g':
+                                cantidadEnGramos = parseFloat(activo.cant);
+                                break;
+                            case 'mg':
+                                cantidadEnGramos = parseFloat(activo.cant) / 1000;
+                                break;
+                            case 'mcg':
+                                cantidadEnGramos = parseFloat(activo.cant) / 1000000;
+                                break;
+                            case 'UI':
+                                cantidadEnGramos = parseFloat(activo.cant) / 2.9;
+                                break;
+                            default:
+                                cantidadEnGramos = 0;
+                        }
 
-                celda1.innerHTML = index + 1;
-                celda2.innerHTML = activo.codOdoo;
-                celda3.innerHTML = activo.activo;
-                celda4.innerHTML = activo.cant;
-                celda5.innerHTML = activo.unidad;
+                        // Calcular Masa Final y Volumen
+                        let factor = data.factor;
+                        let densidad = data.densidad;
+
+                        let masaFinal = cantidadEnGramos * factor;
+                        let volumen = masaFinal / densidad;
+
+                        // Redondear a 4 decimales
+                        cantidadEnGramos = cantidadEnGramos.toFixed(4);
+                        masaFinal = masaFinal.toFixed(4);
+                        volumen = volumen.toFixed(4);
+
+                        // Añadir a tablaCalculos
+                        var nuevaFilaCalculos = tablaCalculos.insertRow();
+                        nuevaFilaCalculos.insertCell(0).innerHTML = index + 1;
+                        nuevaFilaCalculos.insertCell(1).innerHTML = activo.codOdoo;
+                        nuevaFilaCalculos.insertCell(2).innerHTML = activo.activo;
+                        nuevaFilaCalculos.insertCell(3).innerHTML = activo.cant;
+                        nuevaFilaCalculos.insertCell(4).innerHTML = activo.unidad;
+                        nuevaFilaCalculos.insertCell(5).innerHTML = cantidadEnGramos;
+                        nuevaFilaCalculos.insertCell(6).innerHTML = factor;
+                        nuevaFilaCalculos.insertCell(7).innerHTML = densidad;
+                        nuevaFilaCalculos.insertCell(8).innerHTML = masaFinal;  // Masa final en gramos
+                        nuevaFilaCalculos.insertCell(9).innerHTML = volumen;  // Volumen
+                    },
+                    error: function(xhr, status, error) {
+                        console.log("Error al obtener los datos del activo: " + error);
+                    }
+                });
             });
         }
+
+        // Simulaciones de consulta a la base de datos (implementa esto en PHP)
+        function obtenerFactorDesdeBD(codOdoo) {
+            // Aquí deberías hacer la consulta real a la base de datos
+            return 1.2; // Valor simulado
+        }
+
+        function obtenerDensidadDesdeBD(codOdoo) {
+            // Aquí deberías hacer la consulta real a la base de datos
+            return 0.8; // Valor simulado
+        }
+
     </script>
 
     <?php include 'layouts/right-sidebar.php'; ?>
