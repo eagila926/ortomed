@@ -133,6 +133,7 @@ $apellido = $_SESSION['apellido'];
 
             // Variable para almacenar el total de volumen
             var volumenTotal = 0;
+            var capXcap=0;
 
             // Función para mostrar los días de tratamiento desde localStorage
             function mostrarDiasTratamiento() {
@@ -226,6 +227,26 @@ $apellido = $_SESSION['apellido'];
                         }
                     });
                 });
+
+                agregarFilaFija(1101, 'ESTERATO DE MAGNECIO', capXcap, 'g',1,0.4138);
+
+                // Agregar fila según la variable codInven
+                //agregarFilaFija(codInven, 'Otro Activo', '2', 'g');
+            }
+
+            function agregarFilaFija(codOdoo, activo, cantidad, unidad,factor, densidad) {
+                var tablaCalculos = document.getElementById("tablaCalculos").getElementsByTagName('tbody')[0];
+                var nuevaFila = tablaCalculos.insertRow();
+                nuevaFila.insertCell(0).innerHTML = "";
+                nuevaFila.insertCell(1).innerHTML = codOdoo;
+                nuevaFila.insertCell(2).innerHTML = activo;
+                nuevaFila.insertCell(3).innerHTML = cantidad;
+                nuevaFila.insertCell(4).innerHTML = unidad;
+                nuevaFila.insertCell(5).innerHTML = cantidad;
+                nuevaFila.insertCell(6).innerHTML = factor;
+                nuevaFila.insertCell(7).innerHTML = densidad;
+                nuevaFila.insertCell(8).innerHTML = cantidad;
+                nuevaFila.insertCell(9).innerHTML = cantidad*densidad;
             }
 
             // Función para calcular los valores según el volumen total
@@ -294,8 +315,9 @@ $apellido = $_SESSION['apellido'];
                 document.getElementById('capsulasDiarias').innerHTML = 'Cápsulas Diarias: ' + cDiaria;
 
                 var vtnCapsulas = vTotal/cDiaria; //volumen total por numero de capsulas para saber que cantidad de exipiente usar
-                var capXcap = capacidadCap - vtnCapsulas; // capacidad por capsula 
+                capXcap = capacidadCap - vtnCapsulas; // capacidad por capsula del Esterato
 
+                // Agregar fila fija con cod_odoo 1101
                 
             }
         </script>
