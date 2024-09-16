@@ -228,25 +228,30 @@ $apellido = $_SESSION['apellido'];
                     });
                 });
 
+                var capXcap = localStorage.getItem('capXcap');
                 agregarFilaFija(1101, 'ESTERATO DE MAGNECIO', capXcap, 'g',1,0.4138);
 
                 // Agregar fila según la variable codInven
                 //agregarFilaFija(codInven, 'Otro Activo', '2', 'g');
             }
 
-            function agregarFilaFija(codOdoo, activo, cantidad, unidad,factor, densidad) {
+            function agregarFilaFija(codOdoo, activo, cantidad, unidad, factor, densidad) {
+                // Recuperar capXcap desde localStorag
+                var capXcap = localStorage.getItem('capXcap');
+                var diasTratamiento = localStorage.getItem('diasTratamiento');
+
                 var tablaCalculos = document.getElementById("tablaCalculos").getElementsByTagName('tbody')[0];
                 var nuevaFila = tablaCalculos.insertRow();
                 nuevaFila.insertCell(0).innerHTML = "";
                 nuevaFila.insertCell(1).innerHTML = codOdoo;
                 nuevaFila.insertCell(2).innerHTML = activo;
-                nuevaFila.insertCell(3).innerHTML = cantidad;
+                nuevaFila.insertCell(3).innerHTML = capXcap; // Usar capXcap
                 nuevaFila.insertCell(4).innerHTML = unidad;
-                nuevaFila.insertCell(5).innerHTML = cantidad;
+                nuevaFila.insertCell(5).innerHTML = capXcap;
                 nuevaFila.insertCell(6).innerHTML = factor;
                 nuevaFila.insertCell(7).innerHTML = densidad;
-                nuevaFila.insertCell(8).innerHTML = cantidad;
-                nuevaFila.insertCell(9).innerHTML = cantidad*densidad;
+                nuevaFila.insertCell(8).innerHTML = capXcap*factor;
+                nuevaFila.insertCell(9).innerHTML = ((capXcap*factor) / densidad).toFixed(4);
             }
 
             // Función para calcular los valores según el volumen total
@@ -254,7 +259,7 @@ $apellido = $_SESSION['apellido'];
                 var cDiaria = 1;
                 var codInven = 0;
                 var capacidadCap = 0;
-                var codExipiente= 1101;
+                var codExipiente = 1101;
                 var diasTratamiento = localStorage.getItem('diasTratamiento') || 1;
 
                 if (vTotal <= 0.68) {
@@ -314,11 +319,11 @@ $apellido = $_SESSION['apellido'];
                 var cantidadCap = cDiaria * diasTratamiento;
                 document.getElementById('capsulasDiarias').innerHTML = 'Cápsulas Diarias: ' + cDiaria;
 
-                var vtnCapsulas = vTotal/cDiaria; //volumen total por numero de capsulas para saber que cantidad de exipiente usar
-                capXcap = capacidadCap - vtnCapsulas; // capacidad por capsula del Esterato
+                var vtnCapsulas = vTotal / cDiaria; // volumen total por número de cápsulas para saber qué cantidad de excipiente usar
+                capXcap = (capacidadCap - vtnCapsulas).toFixed(4); // capacidad por cápsula del Esterato
 
-                // Agregar fila fija con cod_odoo 1101
-                
+                // Guardar capXcap en localStorage
+                localStorage.setItem('capXcap', capXcap);
             }
         </script>
 
