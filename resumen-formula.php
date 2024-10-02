@@ -27,6 +27,8 @@ $apellido = $_SESSION['apellido'];
     <!-- Plugin css -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.9.1/jquery-ui.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
 
     <?php include 'layouts/head-css.php'; ?>
 </head>
@@ -108,7 +110,31 @@ $apellido = $_SESSION['apellido'];
                                 </div> <!-- end card body-->
                             </div> <!-- end card -->
                         </div><!-- end col-->
-                    </div> <!-- end row-->   
+                    </div> <!-- end row-->
+                    <button onclick="llenarTablaExportable()">Actualizar Tabla Exportable</button>
+                    <button onclick="exportarTablaAExcel()">Exportar a Excel</button>
+                  
+                    <div class="row" style="margin-top: 10px;">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-body">
+                                    <h4 class="header-title">Valores para importar en Odoo</h4>
+                                    <table id="tablaExportable" class="table activate-select dt-responsive nowrap w-100">
+                                        <thead>
+                                            <tr>
+                                                <th>Líneas de LdM/Componente/Id. de la BD</th>
+                                                <th>Líneas de LdM/Cantidad</th>
+                                                <th>Líneas de LdM/Unidad de medida del producto/ID</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                        </tbody>
+                                    </table>
+
+                                </div> <!-- end card body-->
+                            </div> <!-- end card -->
+                        </div><!-- end col-->
+                    </div> <!-- end row-->  
                 
                 </div>
                 <!-- container -->
@@ -241,51 +267,153 @@ $apellido = $_SESSION['apellido'];
                 var cDiaria = localStorage.getItem('cDiaria');
                 var codInven = localStorage.getItem('codInven');
                 var totCapsulas = localStorage.getItem('diasTratamiento') * cDiaria;
+                var codPastillero=0;
+                var frasco = 0;
 
                 // Agregar condicional para seleccionar entre 'CAPSULA GELATINA 00' y 'CAPSULA GELATINA 0'
                 if (codInven == 1078) {
-                    agregarFilaFija(codInven, 'CAPSULA GELATINA 00', totCapsulas, 'und', 0, 0);
+                    agregarFilaFija(codInven, 'CAPSULA GELATINA 00', totCapsulas, 'und', '', '');
                 } else if (codInven == 1077) {
                     agregarFilaFija(codInven, 'CAPSULA GELATINA 0', totCapsulas, 'und', '', '');
                 }
 
-                //Agregar el número de frascos dependiendo la cantidad total de capsulas
+                if(totCapsulas == 30){
+                    codPastillero = 1219;
+                    frasco = 1;
+                    agregarFilaFija(codPastillero, 'PASTILLERO PEQUEÑO', frasco, 'und', '', '');
+                }else if(totCapsulas == 60){
+                    codPastillero = 1219;
+                    frasco = 1;
+                    agregarFilaFija(codPastillero, 'PASTILLERO PEQUEÑO', frasco, 'und', '', '');
+                }else if(totCapsulas == 90){
+                    codPastillero = 12191;
+                    frasco = 1;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 120){
+                    codPastillero = 12191;
+                    frasco = 1;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 150){
+                    codPastillero = 12191;
+                    frasco = 1;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 180){
+                    codPastillero = 12191;
+                    frasco = 2;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 210){
+                    codPastillero = 12191;
+                    frasco = 2;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 240){
+                    codPastillero = 12191;
+                    frasco = 3;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 270){
+                    codPastillero = 12191;
+                    frasco = 3;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 300){
+                    codPastillero = 12191;
+                    frasco = 3;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 330){
+                    codPastillero = 12191;
+                    frasco = 3;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 360){
+                    codPastillero = 12191;
+                    frasco = 3;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 390){
+                    codPastillero = 12191;
+                    frasco = 3;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 420){
+                    codPastillero = 12191;
+                    frasco = 3;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }else if(totCapsulas == 450){
+                    codPastillero = 12191;
+                    frasco = 3;
+                    agregarFilaFija(codPastillero, 'PASTILLERO GRANDE', frasco, 'und', '', '');
+                }
 
             }
 
             function agregarFilaFija(codOdoo, activo, cantidad, unidad, factor, densidad) {
-                // Recuperar capXcap desde localStorag
-                
+                // Recuperar capXcap desde localStorage
                 var diasTratamiento = localStorage.getItem('diasTratamiento');
                 var cDiaria = localStorage.getItem('cDiaria');
-                var masaFinal = cantidad*densidad;
+                var masaFinal = cantidad * densidad;
                 var volumen = (masaFinal / densidad).toFixed(4);
-
 
                 var tablaCalculos = document.getElementById("tablaCalculos").getElementsByTagName('tbody')[0];
                 var nuevaFila = tablaCalculos.insertRow();
-                nuevaFila.insertCell(0).innerHTML = "";
-                nuevaFila.insertCell(1).innerHTML = codOdoo;
-                nuevaFila.insertCell(2).innerHTML = activo;
-                nuevaFila.insertCell(3).innerHTML = cantidad; // Usar capXcap
-                nuevaFila.insertCell(4).innerHTML = unidad;
-                if(codOdoo==1101){
-                    nuevaFila.insertCell(5).innerHTML = cantidad;
-                nuevaFila.insertCell(6).innerHTML = factor;
-                nuevaFila.insertCell(7).innerHTML = densidad;
-                nuevaFila.insertCell(8).innerHTML = cantidad;
-                nuevaFila.insertCell(9).innerHTML = volumen;
-                nuevaFila.insertCell(10).innerHTML = (cantidad*diasTratamiento*cDiaria).toFixed(4);
 
-                }else{
+                if (codOdoo == 1101) {
+                    nuevaFila.insertCell(0).innerHTML = "";
+                    nuevaFila.insertCell(1).innerHTML = codOdoo;
+                    nuevaFila.insertCell(2).innerHTML = activo;
+                    nuevaFila.insertCell(3).innerHTML = cantidad; // Usar capXcap
+                    nuevaFila.insertCell(4).innerHTML = unidad;
+                    nuevaFila.insertCell(5).innerHTML = cantidad;
+                    nuevaFila.insertCell(6).innerHTML = factor;
+                    nuevaFila.insertCell(7).innerHTML = densidad;
+                    nuevaFila.insertCell(8).innerHTML = cantidad;
+                    nuevaFila.insertCell(9).innerHTML = volumen;
+                    nuevaFila.insertCell(10).innerHTML = (cantidad * diasTratamiento * cDiaria).toFixed(4);
+
+                } else if (codOdoo == 1219 || codOdoo == 12191) {
+                    nuevaFila.insertCell(0).innerHTML = "";
+                    nuevaFila.insertCell(1).innerHTML = codOdoo;
+
+                    // Columna "activo" con opciones
+                    var selectActivo = document.createElement('select');
+                    selectActivo.innerHTML = `
+                        <option value="pastillero_pequeño" ${activo === 'pastillero_pequeño' ? 'selected' : ''}>PASTILLERO PEQUEÑO</option>
+                        <option value="pastillero_grande" ${activo === 'pastillero_grande' ? 'selected' : ''}>PASTILLERO GRANDE</option>
+                    `;
+                    selectActivo.addEventListener('change', function() {
+                        // Cambiar codOdoo basado en la selección
+                        if (this.value === 'pastillero_pequeño') {
+                            nuevaFila.cells[1].innerHTML = 1219; // Actualizar codOdoo
+                        } else if (this.value === 'pastillero_grande') {
+                            nuevaFila.cells[1].innerHTML = 12191; // Actualizar codOdoo
+                        }
+                    });
+                    nuevaFila.insertCell(2).appendChild(selectActivo);
+
+                    // Columna "cantidad" con opciones de 1 a 3
+                    nuevaFila.insertCell(3).innerHTML = `
+                        <select>
+                            <option value="1" ${cantidad == 1 ? 'selected' : ''}>1</option>
+                            <option value="2" ${cantidad == 2 ? 'selected' : ''}>2</option>
+                            <option value="3" ${cantidad == 3 ? 'selected' : ''}>3</option>
+                        </select>
+                    `;
+
+                    // Insertar las demás celdas
+                    nuevaFila.insertCell(4).innerHTML = unidad;
                     nuevaFila.insertCell(5).innerHTML = '';
                     nuevaFila.insertCell(6).innerHTML = '';
                     nuevaFila.insertCell(7).innerHTML = '';
                     nuevaFila.insertCell(8).innerHTML = '';
                     nuevaFila.insertCell(9).innerHTML = '';
-                    nuevaFila.insertCell(10).innerHTML = '';
+                    nuevaFila.insertCell(10).innerHTML = cantidad;
+                } else {
+                    nuevaFila.insertCell(0).innerHTML = "";
+                    nuevaFila.insertCell(1).innerHTML = codOdoo;
+                    nuevaFila.insertCell(2).innerHTML = activo;
+                    nuevaFila.insertCell(3).innerHTML = cantidad; // Usar capXcap
+                    nuevaFila.insertCell(4).innerHTML = unidad;
+                    nuevaFila.insertCell(5).innerHTML = '';
+                    nuevaFila.insertCell(6).innerHTML = '';
+                    nuevaFila.insertCell(7).innerHTML = '';
+                    nuevaFila.insertCell(8).innerHTML = '';
+                    nuevaFila.insertCell(9).innerHTML = '';
+                    nuevaFila.insertCell(10).innerHTML = cantidad;
                 }
-                
             }
 
             // Función para calcular los valores según el volumen total
@@ -387,6 +515,53 @@ $apellido = $_SESSION['apellido'];
                 // Guardar capXcap en localStorage
                 localStorage.setItem('capXcap', capXcap);
             }
+            function llenarTablaExportable() {
+                // Obtener las tablas
+                var tablaCalculos = document.getElementById("tablaCalculos").getElementsByTagName('tbody')[0];
+                var tablaExportable = document.getElementById("tablaExportable").getElementsByTagName('tbody')[0];
+
+                // Limpiar el contenido previo de la tablaExportable
+                tablaExportable.innerHTML = "";
+
+                // Recorrer cada fila de tablaCalculos
+                for (var i = 0; i < tablaCalculos.rows.length; i++) {
+                    var filaCalculos = tablaCalculos.rows[i];
+
+                    // Obtener los valores de las columnas necesarias
+                    var columna2TablaCalculos = filaCalculos.cells[1].innerText;  // Segunda columna de tablaCalculos
+                    var columna10TablaCalculos = filaCalculos.cells[10].innerText; // Décima columna de tablaCalculos
+                    var columna5TablaCalculos = filaCalculos.cells[4].innerText;  // Quinta columna de tablaCalculos
+
+                    // Realizar la validación para la tercera columna
+                    var valorUnidadMedida;
+                    if (["g", "mg", "mcg", "UI"].includes(columna5TablaCalculos)) {
+                        valorUnidadMedida = "uom.product_uom_gram";
+                    } else if (columna5TablaCalculos === "und") {
+                        valorUnidadMedida = "uom.product_uom_unit";
+                    } else {
+                        valorUnidadMedida = ""; // Si no coincide, dejar vacío o asignar un valor por defecto
+                    }
+
+                    // Crear una nueva fila para tablaExportable
+                    var nuevaFila = tablaExportable.insertRow();
+
+                    // Insertar los valores en las columnas de tablaExportable
+                    nuevaFila.insertCell(0).innerText = columna2TablaCalculos;   // Segunda columna de tablaCalculos
+                    nuevaFila.insertCell(1).innerText = columna10TablaCalculos;  // Décima columna de tablaCalculos
+                    nuevaFila.insertCell(2).innerText = valorUnidadMedida;       // Validación de la quinta columna de tablaCalculos
+                }
+            }
+            function exportarTablaAExcel() {
+                // Obtener la tabla
+                var tablaExportable = document.getElementById("tablaExportable");
+
+                // Crear una nueva hoja de trabajo de Excel (worksheet) a partir de la tabla HTML
+                var wb = XLSX.utils.table_to_book(tablaExportable, {sheet: "Hoja1"});
+
+                // Generar el archivo Excel y descargarlo
+                XLSX.writeFile(wb, "tablaExportable.xlsx");
+            }
+
         </script>
 
 

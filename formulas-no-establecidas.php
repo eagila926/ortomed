@@ -318,9 +318,18 @@ $apellido = $_SESSION['apellido'];
     }
 
     function abrirModal() {
-            // Abre el modal cuando se presiona el botón "Cotizar"
+        // Obtener el arreglo de activos desde localStorage
+        var activos = JSON.parse(localStorage.getItem('activos')) || [];
+
+        // Verificar si el arreglo está vacío
+        if (activos.length === 0) {
+            // Si no hay activos, mostrar un mensaje de alerta
+            alert("Por favor, ingrese al menos un activo antes de continuar.");
+        } else {
+            // Si hay activos, abrir el modal
             $('#modalDiasTratamiento').modal('show');
         }
+    }
 
     function guardarDiasTratamiento() {
         var dias = document.getElementById("diasTratamiento").value;
