@@ -98,6 +98,7 @@ $apellido = $_SESSION['apellido'];
                                                 <th>Densidad</th>
                                                 <th>Masa Final g</th>
                                                 <th>Volumen</th>
+                                                <th>Total Formula</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -151,6 +152,7 @@ $apellido = $_SESSION['apellido'];
                 var activos = JSON.parse(localStorage.getItem('activos')) || [];
                 var tablaFormula = document.getElementById("tablaFormula").getElementsByTagName('tbody')[0];
                 var tablaCalculos = document.getElementById("tablaCalculos").getElementsByTagName('tbody')[0];
+                var diasTratamiento = localStorage.getItem('diasTratamiento');
 
                 // Limpiar las tablas antes de volver a mostrar los activos
                 tablaFormula.innerHTML = "";
@@ -167,7 +169,7 @@ $apellido = $_SESSION['apellido'];
                     nuevaFilaFormula.insertCell(3).innerHTML = activo.cant;
                     nuevaFilaFormula.insertCell(4).innerHTML = activo.unidad;
 
-                    // Hacer una solicitud AJAX para obtener factor y densidad desde la base de datos
+                    // Solicitud AJAX para obtener factor y densidad
                     $.ajax({
                         url: 'datos-activos.php',
                         type: 'GET',
@@ -197,11 +199,13 @@ $apellido = $_SESSION['apellido'];
 
                             let masaFinal = cantidadEnGramos * factor;
                             let volumen = masaFinal / densidad;
+                            let totFormula = masaFinal * diasTratamiento;
 
                             // Redondear a 4 decimales
                             cantidadEnGramos = cantidadEnGramos.toFixed(4);
                             masaFinal = masaFinal.toFixed(4);
                             volumen = volumen.toFixed(4);
+                            totFormula = totFormula.toFixed(4);
 
                             // Añadir a tablaCalculos
                             var nuevaFilaCalculos = tablaCalculos.insertRow();
@@ -215,9 +219,11 @@ $apellido = $_SESSION['apellido'];
                             nuevaFilaCalculos.insertCell(7).innerHTML = densidad;
                             nuevaFilaCalculos.insertCell(8).innerHTML = masaFinal;
                             nuevaFilaCalculos.insertCell(9).innerHTML = volumen;
+                            nuevaFilaCalculos.insertCell(10).innerHTML = totFormula;
 
                             // Sumar el volumen al total
                             volumenTotal += parseFloat(volumen);
+                            console.log("Volumen Total: " + volumenTotal);
 
                             // Llamar a la función para calcular cDiaria y cantidadCap
                             calcularValores(volumenTotal);
@@ -229,29 +235,57 @@ $apellido = $_SESSION['apellido'];
                 });
 
                 var capXcap = localStorage.getItem('capXcap');
-                agregarFilaFija(1101, 'ESTERATO DE MAGNECIO', capXcap, 'g',1,0.4138);
+                let cantidadExipiente = (capXcap * 0.4138).toFixed(4);
+                agregarFilaFija(1101, 'ESTERATO DE MAGNECIO', cantidadExipiente, 'g',1,0.4138);
 
-                // Agregar fila según la variable codInven
-                //agregarFilaFija(codInven, 'Otro Activo', '2', 'g');
+                var cDiaria = localStorage.getItem('cDiaria');
+                var codInven = localStorage.getItem('codInven');
+                var totCapsulas = localStorage.getItem('diasTratamiento') * cDiaria;
+
+                // Agregar condicional para seleccionar entre 'CAPSULA GELATINA 00' y 'CAPSULA GELATINA 0'
+                if (codInven == 1078) {
+                    agregarFilaFija(codInven, 'CAPSULA GELATINA 00', totCapsulas, 'und', 0, 0);
+                } else if (codInven == 1077) {
+                    agregarFilaFija(codInven, 'CAPSULA GELATINA 0', totCapsulas, 'und', '', '');
+                }
+
+                //Agregar el número de frascos dependiendo la cantidad total de capsulas
+
             }
 
             function agregarFilaFija(codOdoo, activo, cantidad, unidad, factor, densidad) {
                 // Recuperar capXcap desde localStorag
-                var capXcap = localStorage.getItem('capXcap');
+                
                 var diasTratamiento = localStorage.getItem('diasTratamiento');
+                var cDiaria = localStorage.getItem('cDiaria');
+                var masaFinal = cantidad*densidad;
+                var volumen = (masaFinal / densidad).toFixed(4);
+
 
                 var tablaCalculos = document.getElementById("tablaCalculos").getElementsByTagName('tbody')[0];
                 var nuevaFila = tablaCalculos.insertRow();
                 nuevaFila.insertCell(0).innerHTML = "";
                 nuevaFila.insertCell(1).innerHTML = codOdoo;
                 nuevaFila.insertCell(2).innerHTML = activo;
-                nuevaFila.insertCell(3).innerHTML = capXcap; // Usar capXcap
+                nuevaFila.insertCell(3).innerHTML = cantidad; // Usar capXcap
                 nuevaFila.insertCell(4).innerHTML = unidad;
-                nuevaFila.insertCell(5).innerHTML = capXcap;
+                if(codOdoo==1101){
+                    nuevaFila.insertCell(5).innerHTML = cantidad;
                 nuevaFila.insertCell(6).innerHTML = factor;
                 nuevaFila.insertCell(7).innerHTML = densidad;
-                nuevaFila.insertCell(8).innerHTML = capXcap*factor;
-                nuevaFila.insertCell(9).innerHTML = ((capXcap*factor) / densidad).toFixed(4);
+                nuevaFila.insertCell(8).innerHTML = cantidad;
+                nuevaFila.insertCell(9).innerHTML = volumen;
+                nuevaFila.insertCell(10).innerHTML = (cantidad*diasTratamiento*cDiaria).toFixed(4);
+
+                }else{
+                    nuevaFila.insertCell(5).innerHTML = '';
+                    nuevaFila.insertCell(6).innerHTML = '';
+                    nuevaFila.insertCell(7).innerHTML = '';
+                    nuevaFila.insertCell(8).innerHTML = '';
+                    nuevaFila.insertCell(9).innerHTML = '';
+                    nuevaFila.insertCell(10).innerHTML = '';
+                }
+                
             }
 
             // Función para calcular los valores según el volumen total
@@ -314,13 +348,41 @@ $apellido = $_SESSION['apellido'];
                     cDiaria = 10;
                     codInven = 1078;
                     capacidadCap = 0.95;
+                }else if (vTotal >= 9.51 && vTotal <= 10.45) {
+                    cDiaria = 11;
+                    codInven = 1078;
+                    capacidadCap = 0.95;
+                }
+                else if (vTotal >= 10.46 && vTotal <= 11.40) {
+                    cDiaria = 12;
+                    codInven = 1078;
+                    capacidadCap = 0.95;
+                }
+                else if (vTotal >= 11.41 && vTotal <= 12.35) {
+                    cDiaria = 13;
+                    codInven = 1078;
+                    capacidadCap = 0.95;
+                }
+                else if (vTotal >= 12.36 && vTotal <= 13.30) {
+                    cDiaria = 14;
+                    codInven = 1078;
+                    capacidadCap = 0.95;
+                }
+                else if (vTotal >= 13.31 && vTotal <= 14.25) {
+                    cDiaria = 15;
+                    codInven = 1078;
+                    capacidadCap = 0.95;
                 }
 
+                localStorage.setItem('codInven', codInven);
+                console.log('Codigo de la capsula',codInven);
+                localStorage.setItem('cDiaria', cDiaria);
+                console.log('Capsulas Diarias',cDiaria);
                 var cantidadCap = cDiaria * diasTratamiento;
                 document.getElementById('capsulasDiarias').innerHTML = 'Cápsulas Diarias: ' + cDiaria;
 
                 var vtnCapsulas = vTotal / cDiaria; // volumen total por número de cápsulas para saber qué cantidad de excipiente usar
-                capXcap = (capacidadCap - vtnCapsulas).toFixed(4); // capacidad por cápsula del Esterato
+                capXcap = ((capacidadCap - vtnCapsulas)).toFixed(4); // capacidad por cápsula del Esterato
 
                 // Guardar capXcap en localStorage
                 localStorage.setItem('capXcap', capXcap);
