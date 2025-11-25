@@ -575,9 +575,6 @@ class FormulaController extends Controller
 
     }
 
-
-
-
     // =================== Guardar cabecera de fórmula ===================
 
     public function guardar(Request $request)

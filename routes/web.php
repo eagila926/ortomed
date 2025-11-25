@@ -9,6 +9,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\MedicoController;
 use App\Http\Controllers\RecetaController;
 use App\Http\Controllers\PedidoController;
+use App\Http\Controllers\PedidoFormulaController;
 use App\Http\Middleware\ProduccionAccess;
 use App\Http\Middleware\PedidosAccess;
 use App\Http\Middleware\RecetasAccess;
@@ -38,6 +39,9 @@ Route::get('/dompdf-check', function () {
 // Autocompletado de productos (pedidos) - se usa en el front sin necesidad de auth extra
 Route::get('/pedidos/productos/buscar', [PedidoController::class, 'buscarProductos'])
     ->name('pedidos.productos.buscar');
+
+Route::get('/pedidos/formulas/buscar', [PedidoFormulaController::class, 'buscarFormulas'])
+    ->name('pedidos.formulas.buscar');
 
 /*
 |--------------------------------------------------------------------------
@@ -139,9 +143,14 @@ Route::middleware('auth')->group(function () {
     Route::prefix('pedidos')->name('pedidos.')
         ->middleware(PedidosAccess::class)
         ->group(function () {
+            // ======= PRODUCTOS =======
             Route::get('/productos', [PedidoController::class, 'productos'])->name('productos');
             Route::post('/productos/agregar', [PedidoController::class, 'agregarProducto'])->name('productos.agregar');
+
+            // (Si ya no usas el índice, podrías eliminar esta)
             Route::delete('/productos/{index}', [PedidoController::class, 'eliminarProducto'])->name('productos.eliminar');
+
+            // Eliminar por id (esta es la que estás usando en la vista)
             Route::delete('/pedidos/productos/{id}', [PedidoController::class, 'eliminarProducto'])->name('pedidos.productos.eliminar');
 
             Route::post('/finalizar', [PedidoController::class, 'finalizar'])->name('finalizar');
@@ -150,8 +159,27 @@ Route::middleware('auth')->group(function () {
 
             Route::get('/mis-pedidos', [PedidoController::class, 'misPedidos'])->name('mis');
 
-            Route::view('/formulas', 'pedidos.formulas')->name('formulas');
+
+            // ======= FÓRMULAS =======
+            // listado principal (carrito de fórmulas)
+            Route::get('/formulas', [PedidoFormulaController::class, 'formulas'])->name('formulas');
+
+            // agregar al carrito
+            Route::post('/formulas/agregar', [PedidoFormulaController::class, 'agregarFormula'])->name('formulas.agregar');
+
+            // eliminar ítem del carrito
+            Route::delete('/formulas/{id}', [PedidoFormulaController::class, 'eliminarFormula'])->name('formulas.eliminar');
+
+            // finalizar pedido de fórmulas
+            Route::post('/formulas/finalizar', [PedidoFormulaController::class, 'finalizarFormulas'])->name('formulas.finalizar');
+
+            // PDF de pedido de fórmulas
+            Route::get('/formulas/{pedido}/pdf', [PedidoFormulaController::class, 'pdf'])->name('formulas.pdf');
+
+            // Mis pedidos de fórmulas
+            Route::get('/mis-pedidos-formulas', [PedidoFormulaController::class, 'misPedidosFormulas'])->name('formulas.mis');
         });
+
 
     /*
     |------------------------- Logout -------------------------

@@ -75,20 +75,57 @@
         {{-- Pedidos: Admin, Distribuidor --}}
         @if($user && $user->hasRole(['Admin','Distribuidor']))
           <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle {{ request()->routeIs('pedidos.*') ? 'fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">
+            <a class="nav-link dropdown-toggle {{ request()->routeIs('pedidos.*') ? 'fw-semibold' : '' }}"
+              href="#" role="button" data-bs-toggle="dropdown">
               <i class="bi bi-bag-check"></i> Pedidos
             </a>
+
             <ul class="dropdown-menu">
-              @if (Route::has('pedidos.mis'))
-                <li><a class="dropdown-item" href="{{ route('pedidos.mis') }}">Mis pedidos</a></li>
+
+              {{-- Submenú: Mis pedidos --}}
+              @if (Route::has('pedidos.mis') || Route::has('pedidos.formulas.mis'))
+                <li><h6 class="dropdown-header">Mis pedidos</h6></li>
+
+                @if (Route::has('pedidos.mis'))
+                  <li>
+                    <a class="dropdown-item" href="{{ route('pedidos.mis') }}">
+                      Productos
+                    </a>
+                  </li>
+                @endif
+
+                @if (Route::has('pedidos.formulas.mis'))
+                  <li>
+                    <a class="dropdown-item" href="{{ route('pedidos.formulas.mis') }}">
+                      Fórmulas
+                    </a>
+                  </li>
+                @endif
+
+                <li><hr class="dropdown-divider"></li>
               @endif
-              <li><a class="dropdown-item" href="{{ route('pedidos.productos') }}">Productos Finales</a></li>
+
+              {{-- Submenú: Nuevo pedido --}}
+              <li><h6 class="dropdown-header">Nuevo pedido</h6></li>
+
+              <li>
+                <a class="dropdown-item" href="{{ route('pedidos.productos') }}">
+                  Productos Finales
+                </a>
+              </li>
+
               @if (Route::has('pedidos.formulas'))
-                <li><a class="dropdown-item" href="{{ route('pedidos.formulas') }}">Fórmulas ortomoleculares</a></li>
+                <li>
+                  <a class="dropdown-item" href="{{ route('pedidos.formulas') }}">
+                    Fórmulas ortomoleculares
+                  </a>
+                </li>
               @endif
+
             </ul>
           </li>
         @endif
+
 
       </ul>
 
