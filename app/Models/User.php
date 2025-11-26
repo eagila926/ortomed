@@ -20,6 +20,7 @@ class User extends Authenticatable
         'password',
         'rol',
         'estado',
+        'pais',
     ];
 
     public function getEmailForPasswordReset() { return $this->correo; }

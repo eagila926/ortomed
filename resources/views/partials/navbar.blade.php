@@ -50,7 +50,7 @@
         </li>
 
         {{-- Producción: Admin, Visitador, Distribuidor, Laboratorio --}}
-        @if($user && $user->hasRole(['Admin','Visitador','Laboratorio']))
+        @if($user && $user->hasRole(['Admin','Visitador','Laboratorio','Call']))
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ request()->routeIs('formulas.*') || request()->routeIs('fe.*') ? 'fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">
               <i class="bi bi-grid-3x3-gap"></i> Producción
@@ -125,6 +125,29 @@
             </ul>
           </li>
         @endif
+
+        {{-- Usuarios: solo Admin --}}
+        @if($user && $user->hasRole(['Admin']))
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {{ request()->routeIs('usuarios.*') ? 'fw-semibold' : '' }}"
+              href="#" role="button" data-bs-toggle="dropdown">
+              <i class="bi bi-people"></i> Usuarios
+            </a>
+            <ul class="dropdown-menu">
+              <li>
+                <a class="dropdown-item" href="{{ route('usuarios.index') }}">
+                  Listar usuarios
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="{{ route('usuarios.create') }}">
+                  Registrar usuario
+                </a>
+              </li>
+            </ul>
+          </li>
+        @endif
+
 
 
       </ul>
