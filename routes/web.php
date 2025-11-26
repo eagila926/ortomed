@@ -13,12 +13,19 @@ use App\Http\Controllers\PedidoFormulaController;
 use App\Http\Middleware\ProduccionAccess;
 use App\Http\Middleware\PedidosAccess;
 use App\Http\Middleware\RecetasAccess;
+use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\Auth\ResetPasswordController;
 
 /*
 |--------------------------------------------------------------------------
 | Rutas públicas (sin autenticación)
 |--------------------------------------------------------------------------
 */
+Route::get('password/forgot', [ForgotPasswordController::class, 'showLinkRequestForm'])->name('password.request');
+Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
+
+Route::get('password/reset/{token}', [ResetPasswordController::class, 'showResetForm'])->name('password.reset');
+Route::post('password/reset', [ResetPasswordController::class, 'reset'])->name('password.update');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login',  [AuthController::class, 'showLoginForm'])->name('login');
