@@ -11,7 +11,7 @@ class ProduccionAccess
     {
         $user = Auth::user();
 
-        if (!$user || !in_array($user->rol, ['Admin','Visitador','Laboratorio','Call'], true)) {
+        if (!$user || !in_array($user->rol, ['Admin','Visitador','Laboratorio','Call','Distribuidor'], true)) {
             abort(403, 'No tienes permisos para acceder a Producción.');
         }
 

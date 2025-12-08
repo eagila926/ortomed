@@ -50,7 +50,7 @@
         </li>
 
         {{-- Producción: Admin, Visitador, Distribuidor, Laboratorio --}}
-        @if($user && $user->hasRole(['Admin','Visitador','Laboratorio','Call']))
+        @if($user && $user->hasRole(['Admin','Visitador','Laboratorio','Call','Distribuidor']))
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle {{ request()->routeIs('formulas.*') || request()->routeIs('fe.*') ? 'fw-semibold' : '' }}" href="#" role="button" data-bs-toggle="dropdown">
               <i class="bi bi-grid-3x3-gap"></i> Producción
@@ -147,8 +147,6 @@
             </ul>
           </li>
         @endif
-
-
 
       </ul>
 
