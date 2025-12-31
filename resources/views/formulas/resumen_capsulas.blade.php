@@ -15,17 +15,17 @@
     <form action="{{ route('formulas.guardar') }}" method="POST" class="mb-3">
       @csrf
       <div class="row g-2 align-items-end">
-        <div class="col-12 col-md-3">
-          <label class="form-label mb-1">Código de fórmula</label>
-          <input type="text" name="cod_formula" class="form-control" value="{{ $codFormula ?? '' }}" readonly>
-        </div>
-        <div class="col-12 col-md-3">
+        
+        <div class="col-12 col-md-4">
           <label class="form-label mb-1">Nombre etiqueta</label>
           <input type="text" name="nombre_etiqueta" class="form-control" value="{{ old('nombre_etiqueta') }}" placeholder="Ej. SUEÑO PROFUNDO" autocomplete="off">
         </div>
-        <div class="col-12 col-md-3">
+        <div class="col-12 col-md-4">
           <label class="form-label mb-1">Médico</label>
           <input type="text" name="medico" id="medico" class="form-control" value="{{ old('medico') }}" placeholder="Buscar médico (min. 2 letras)" autocomplete="off">
+        </div>
+        <div class="col-12 col-md-4">
+          <input type="hidden" name="cod_formula" value="{{ $codFormula ?? '' }}">
         </div>
       </div>
 

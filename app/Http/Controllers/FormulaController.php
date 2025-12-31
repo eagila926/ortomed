@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
+use App\Http\Controllers\FormulasEstController;
 
 
 class FormulaController extends Controller
@@ -590,7 +591,7 @@ class FormulaController extends Controller
             'cod_formula'           => ['required','string','max:30'],
             'nombre_etiqueta'       => ['nullable','string','max:150'],
             'medico'                => ['nullable','string','max:120'],
-            //'paciente'              => ['nullable','string','max:120'],
+            // 'paciente'           => ['nullable','string','max:120'],
             'precio_medico'         => ['nullable','numeric'],
             'precio_publico'        => ['nullable','numeric'],
             'precio_distribuidor'   => ['nullable','numeric'],
@@ -603,13 +604,14 @@ class FormulaController extends Controller
         // Re-generar el código en backend para evitar manipulación
         $codigoBackend = $this->buildCodFormula();
 
-        DB::transaction(function () use ($request, $userId, $codigoBackend) {
+        $formulaId = DB::transaction(function () use ($request, $userId, $codigoBackend) {
+
             // 1) Guardar cabecera
             $precio_medico       = max(10, (float)$request->input('precio_medico', 0));
             $precio_publico      = (float)$request->input('precio_publico', 0);
             $precio_distribuidor = (float)$request->input('precio_distribuidor', 0);
 
-            Formula::create([
+            $formula = Formula::create([
                 'codigo'              => $codigoBackend,
                 'nombre_etiqueta'     => $request->input('nombre_etiqueta'),
                 'user_id'             => $userId,
@@ -621,22 +623,21 @@ class FormulaController extends Controller
                 'tomas_diarias'       => (float)$request->input('tomas_diarias', 0),
             ]);
 
-
-            // 2) Calcular filas (activos + esterato + cápsulas + pastilleros)
+            // 2) Calcular filas (activos + esterato + cápsulas + pastillero)
             $rows = $this->calcularFilasParaGuardar($userId);
 
-            // 3) Mapear a formulas_items
+            // 3) Insertar items
             $now = now();
             $insert = $rows->map(function ($r) use ($codigoBackend, $now) {
                 return [
-                    'codigo'    => $codigoBackend,
-                    'cod_odoo'  => (int)($r['cod_odoo'] ?? 0),
-                    'activo'    => (string)($r['activo'] ?? ''),
-                    'unidad'    => $r['unidad'] ?? null,
-                    'masa_mes'  => isset($r['masa_mes']) ? (float)$r['masa_mes'] : null, // g mensual, puede ser NULL
+                    'codigo'     => $codigoBackend,
+                    'cod_odoo'   => (int)($r['cod_odoo'] ?? 0),
+                    'activo'     => (string)($r['activo'] ?? ''),
+                    'unidad'     => $r['unidad'] ?? null,
+                    'masa_mes'   => isset($r['masa_mes']) ? (float)$r['masa_mes'] : null,
                     'cantidad'   => isset($r['cantidad']) ? (float)$r['cantidad'] : null,
-                    'created_at'=> $now,
-                    'updated_at'=> $now,
+                    'created_at' => $now,
+                    'updated_at' => $now,
                 ];
             })->all();
 
@@ -644,12 +645,28 @@ class FormulaController extends Controller
                 FormulaItem::insert($insert);
             }
 
-            // (Opcional) Limpiar temporales del usuario después de guardar
+            // 4) Limpiar temporales
             ActivoTemp::where('user_id', $userId)->delete();
+
+            // DEVUELVE ID para usarlo fuera de la transacción
+            return (int) $formula->id;
         });
 
-        return redirect()->route('formulas.nuevas')->with('ok', 'Fórmula guardada correctamente.');
+        // 5) Añadir automáticamente a "Fórmulas Establecidas" (sesión)
+        $sessionKey = \App\Http\Controllers\FormulasEstController::SESSION_KEY;
+
+        $items = $request->session()->get($sessionKey, []); // [['id'=>1,'tipo'=>null], ...]
+        if (!collect($items)->firstWhere('id', $formulaId)) {
+            $items[] = ['id' => $formulaId, 'tipo' => null];
+            $request->session()->put($sessionKey, $items);
+        }
+
+        // 6) Redirigir a la vista de Fórmulas Establecidas
+        return redirect()
+            ->route('fe.index')
+            ->with('ok', 'Fórmula guardada y añadida a Fórmulas Establecidas.');
     }
+
 
     private function calcularFilasParaGuardar(int $userId): \Illuminate\Support\Collection
     {
@@ -787,35 +804,35 @@ class FormulaController extends Controller
     public function guardarSobres(Request $request)
     {
         $request->validate([
-        'nombre_etiqueta' => ['required','string','max:150'],
-        'medico'          => ['required','regex:/^[A-Z\s]+$/'],
-    ], ['regex' => 'Solo se permiten letras mayúsculas sin acentos ni símbolos.']);
+            'nombre_etiqueta' => ['required','string','max:150'],
+            'medico'          => ['required','regex:/^[A-Z\s]+$/'],
+        ], ['regex' => 'Solo se permiten letras mayúsculas sin acentos ni símbolos.']);
 
-    $request->validate([
-        'cod_formula'           => ['required','string','max:30'],
-        'nombre_etiqueta'       => ['nullable','string','max:150'],
-        'medico'                => ['nullable','string','max:120'],
-        //'paciente'              => ['nullable','string','max:120'],
-        'precio_medico'         => ['nullable','numeric'],
-        'precio_publico'        => ['nullable','numeric'],
-        'precio_distribuidor'   => ['nullable','numeric'],
-        'tomas_diarias'         => ['nullable','numeric'],
-    ]);
+        $request->validate([
+            'cod_formula'           => ['required','string','max:30'],
+            'nombre_etiqueta'       => ['nullable','string','max:150'],
+            'medico'                => ['nullable','string','max:120'],
+            // 'paciente'            => ['nullable','string','max:120'],
+            'precio_medico'         => ['nullable','numeric'],
+            'precio_publico'        => ['nullable','numeric'],
+            'precio_distribuidor'   => ['nullable','numeric'],
+            'tomas_diarias'         => ['nullable','numeric'],
+        ]);
 
-    $userId = Auth::id();
-    if (!$userId) abort(401);
+        $userId = Auth::id();
+        if (!$userId) abort(401);
 
-    // USAR EL MISMO CÓDIGO QUE VIENE DEL RESUMEN
-    $codigoBackend = $request->input('cod_formula');
+        // Mantienes tu lógica: usar el código que viene del resumen
+        $codigoBackend = $request->input('cod_formula');
 
-        DB::transaction(function () use ($request, $userId, $codigoBackend) {
+        $formulaId = DB::transaction(function () use ($request, $userId, $codigoBackend) {
 
             // 1) Cabecera
             $precio_medico       = max(10, (float)$request->input('precio_medico', 0));
             $precio_publico      = (float)$request->input('precio_publico', 0);
             $precio_distribuidor = (float)$request->input('precio_distribuidor', 0);
 
-            Formula::create([
+            $formula = Formula::create([
                 'codigo'              => $codigoBackend,
                 'nombre_etiqueta'     => $request->input('nombre_etiqueta'),
                 'user_id'             => $userId,
@@ -827,21 +844,16 @@ class FormulaController extends Controller
                 'tomas_diarias'       => (float)$request->input('tomas_diarias', 1) ?: 1,
             ]);
 
-
             // 2) Ítems: fijos + temporales (calculando masa_mes)
             $rows = collect([
-                // und (guardamos la cantidad mensual como masa_mes también)
-                ['cod_odoo' => 70277, 'activo' => 'CAJA',       'cantidad' => 1,   'unidad' => 'und', 'masa_mes' => 1],
-                ['cod_odoo' => 70299, 'activo' => 'SOBRES',     'cantidad' => 30,  'unidad' => 'und', 'masa_mes' => 30],
-                // mg/mes → g/mes
-                ['cod_odoo' => 70256, 'activo' => 'CLIGHT',     'cantidad' => 1500,'unidad' => 'mg',  'masa_mes' => 1500/1000], // 1.5 g
-                ['cod_odoo' =>  9585, 'activo' => 'SUCARALOSA', 'cantidad' => 100, 'unidad' => 'mg',  'masa_mes' => 100/1000],  // 0.1 g
+                ['cod_odoo' => 70277, 'activo' => 'CAJA',       'cantidad' => 1,    'unidad' => 'und', 'masa_mes' => 1],
+                ['cod_odoo' => 70299, 'activo' => 'SOBRES',     'cantidad' => 30,   'unidad' => 'und', 'masa_mes' => 30],
+                ['cod_odoo' => 70256, 'activo' => 'CLIGHT',     'cantidad' => 1500, 'unidad' => 'mg',  'masa_mes' => 1500/1000],
+                ['cod_odoo' =>  9585, 'activo' => 'SUCARALOSA', 'cantidad' => 100,  'unidad' => 'mg',  'masa_mes' => 100/1000],
             ]);
-
 
             $temp = ActivoTemp::where('user_id', $userId)->orderBy('id')->get();
             foreach ($temp as $t) {
-                // cantidad por sobre = por día → mg/día
                 $mg_dia = 0.0;
                 switch ($t->unidad) {
                     case 'g':   $mg_dia = (float)$t->cantidad * 1000; break;
@@ -849,29 +861,30 @@ class FormulaController extends Controller
                     case 'mcg': $mg_dia = (float)$t->cantidad / 1000; break;
                     case 'UI':
                         $mg_dia = ((int)$t->cod_odoo === 1343)
-                                ? ((float)$t->cantidad * 0.000025 / 1000)
-                                : ((float)$t->cantidad * 0.00067);
+                            ? ((float)$t->cantidad * 0.000025 / 1000)
+                            : ((float)$t->cantidad * 0.00067);
                         break;
                 }
+
                 $masa_mes = ($mg_dia * 30) / 1000.0; // g/mes
 
                 $rows->push([
                     'cod_odoo' => (int)$t->cod_odoo,
                     'activo'   => (string)$t->activo,
-                    'cantidad' => (float)$t->cantidad, // por sobre
+                    'cantidad' => (float)$t->cantidad,
                     'unidad'   => $t->unidad,
                     'masa_mes' => round($masa_mes, 6),
                 ]);
             }
 
-            // 3) Insert
+            // 3) Insert items
             $now = now();
             $insert = $rows->map(fn($r) => [
                 'codigo'     => $codigoBackend,
                 'cod_odoo'   => (int)$r['cod_odoo'],
                 'activo'     => (string)$r['activo'],
                 'unidad'     => $r['unidad'],
-                'masa_mes'   => $r['masa_mes'],   // <-- ahora ya NO es null
+                'masa_mes'   => $r['masa_mes'],
                 'cantidad'   => $r['cantidad'],
                 'created_at' => $now,
                 'updated_at' => $now,
@@ -883,10 +896,25 @@ class FormulaController extends Controller
 
             // 4) Limpiar temporales
             ActivoTemp::where('user_id', $userId)->delete();
+
+            return (int) $formula->id;
         });
 
-        return redirect()->route('formulas.nuevas')->with('ok', 'Fórmula en sobres guardada correctamente.');
+        // 5) Auto-add a Fórmulas Establecidas (sesión)
+        $sessionKey = \App\Http\Controllers\FormulasEstController::SESSION_KEY;
+
+        $items = $request->session()->get($sessionKey, []);
+        if (!collect($items)->firstWhere('id', $formulaId)) {
+            $items[] = ['id' => $formulaId, 'tipo' => null];
+            $request->session()->put($sessionKey, $items);
+        }
+
+        // 6) Redirigir a FE
+        return redirect()
+            ->route('fe.index')
+            ->with('ok', 'Fórmula en sobres guardada y añadida a Fórmulas Establecidas.');
     }
+
 
 
     public function recientes(Request $request)

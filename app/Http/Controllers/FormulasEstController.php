@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FormulasEstController extends Controller
 {
-    private const SESSION_KEY = 'fe_items';
+    public const SESSION_KEY = 'fe_items';
     private const TIPO_ETIQUETA = [
         'Seleccionar','Dr Redin','Dr Li','Dr Walter','Dra Maria Delia',
         'Dra Viteri','Dra Bernarda','M Urdiales','Naturmed','Sobre'
