@@ -15,6 +15,7 @@ use App\Http\Middleware\PedidosAccess;
 use App\Http\Middleware\RecetasAccess;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
+use App\Http\Controllers\ActivoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -190,6 +191,11 @@ Route::middleware('auth')->group(function () {
             Route::get('/mis-pedidos-formulas', [PedidoFormulaController::class, 'misPedidosFormulas'])->name('formulas.mis');
         });
 
+        Route::prefix('activos')->name('activos.')->middleware('activos')->group(function () {
+            Route::get('/', [ActivoController::class, 'index'])->name('index');
+            Route::get('/{activo}/editar', [ActivoController::class, 'edit'])->name('edit');
+            Route::put('/{activo}', [ActivoController::class, 'update'])->name('update');
+        });
 
     /*
     |------------------------- Logout -------------------------

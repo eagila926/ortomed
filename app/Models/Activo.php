@@ -18,4 +18,24 @@ class Activo extends Model
         'cod_odoo','nombre','valor_costo','factor','minimo',
         'maximo','unidad','factor_venta','densidad'
         ];
+
+    public function getRouteKeyName()
+    {
+        return 'cod_odoo';
+    }
+
+    public function getMinimoNumberAttribute(): ?float
+    {
+        return is_numeric($this->minimo)
+            ? (float) $this->minimo
+            : null;
+    }
+
+    public function getMaximoNumberAttribute(): ?float
+    {
+        return is_numeric($this->maximo)
+            ? (float) $this->maximo
+            : null;
+    }
+
 }

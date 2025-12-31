@@ -148,6 +148,14 @@
           </li>
         @endif
 
+        @if($user && $user->hasRole(['Admin']))
+          <li class="nav-item">
+            <a class="nav-link {{ request()->routeIs('activos.*') ? 'fw-semibold' : '' }}" href="{{ route('activos.index') }}">
+              <i class="bi bi-box-seam"></i> Activos
+            </a>
+          </li>
+        @endif
+
       </ul>
 
       {{-- Perfil / Salir --}}
