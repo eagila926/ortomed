@@ -82,9 +82,39 @@
       <div class="card-body">
         <h4 class="mb-3">Precio de la Formula</h4>
 
-        <p><strong>Precio Médico:</strong> {{ number_format($precio_med ?? 0, 2) }}</p>
+        {{-- <p><strong>Precio Médico:</strong> {{ number_format($precio_med ?? 0, 2) }}</p>
         <p><strong>Precio Público:</strong> {{ number_format($precio_pvp ?? 0, 2) }}</p>
-        <p><strong>Precio Distribuidor:</strong> {{ number_format($precio_dis ?? 0, 2) }}</p>
+        <p><strong>Precio Distribuidor:</strong> {{ number_format($precio_dis ?? 0, 2) }}</p> --}}
+
+
+        @php
+          $precio_med_v = (float)($precio_med ?? 0);
+          $precio_pvp_v = (float)($precio_pvp ?? 0);
+          $precio_dis_v = (float)($precio_dis ?? 0);
+        @endphp
+
+        <div class="row g-2">
+          <div class="col-12 col-md-4">
+            <label class="form-label">Precio Médico</label>
+            <input type="number" step="0.01" min="0" id="precio_med_input"
+                  class="form-control"
+                  value="{{ number_format($precio_med_v, 2, '.', '') }}">
+            <small class="text-muted">Si es menor a 12, sube automáticamente a 12.</small>
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Precio Público</label>
+            <input type="text" id="precio_pvp_out" class="form-control" readonly
+                  value="{{ number_format($precio_pvp_v, 2, '.', '') }}">
+          </div>
+
+          <div class="col-12 col-md-4">
+            <label class="form-label">Precio Distribuidor</label>
+            <input type="text" id="precio_dis_out" class="form-control" readonly
+                  value="{{ number_format($precio_dis_v, 2, '.', '') }}">
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -210,7 +240,9 @@
 
         // medico y paciente → solo letras y espacios
         soloMayusculas(document.querySelector("[name='medico']"));
-        soloMayusculas(document.querySelector("[name='paciente']"));
+        const pac = document.querySelector("[name='paciente']");
+        if (pac) soloMayusculas(pac);
+
       });
     </script>
 
@@ -230,4 +262,53 @@
         });
       });
       </script>
+
+      <script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  // =========================
+  // Precio médico editable → recalcula y sincroniza hidden
+  // Piso: 12
+  // Público: +33.333% => * (4/3)
+  // Distribuidor: 65% => * 0.65
+  // =========================
+  const medInput = document.getElementById('precio_med_input');
+  const pvpOut   = document.getElementById('precio_pvp_out');
+  const disOut   = document.getElementById('precio_dis_out');
+
+  const hidMed = document.querySelector("input[name='precio_medico']");
+  const hidPvp = document.querySelector("input[name='precio_publico']");
+  const hidDis = document.querySelector("input[name='precio_distribuidor']");
+
+  const round2 = (n) => (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
+
+  const recalcPrecios = () => {
+    if (!medInput) return;
+
+    let med = parseFloat(medInput.value || '0');
+    if (isNaN(med)) med = 0;
+
+    // Piso $12 (si quieres que vacío/0 también se fuerce a 12, usa: if (med < 12) med = 12;)
+    if (med > 0 && med < 12) med = 12;
+
+    const dis = med * 0.65;
+    const pvp = med * (4 / 3); // 33.333...%
+
+    medInput.value = round2(med);
+    if (disOut) disOut.value = round2(dis);
+    if (pvpOut) pvpOut.value = round2(pvp);
+
+    if (hidMed) hidMed.value = round2(med);
+    if (hidDis) hidDis.value = round2(dis);
+    if (hidPvp) hidPvp.value = round2(pvp);
+  };
+
+  if (medInput) {
+    medInput.addEventListener('input', recalcPrecios);
+    recalcPrecios(); // inicial
+  }
+
+});
+</script>
+
 @endsection

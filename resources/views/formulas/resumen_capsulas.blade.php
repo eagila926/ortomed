@@ -15,19 +15,43 @@
     <form action="{{ route('formulas.guardar') }}" method="POST" class="mb-3">
       @csrf
       <div class="row g-2 align-items-end">
-        
-        <div class="col-12 col-md-4">
-          <label class="form-label mb-1">Nombre etiqueta</label>
-          <input type="text" name="nombre_etiqueta" class="form-control" value="{{ old('nombre_etiqueta') }}" placeholder="Ej. SUEÑO PROFUNDO" autocomplete="off">
-        </div>
-        <div class="col-12 col-md-4">
-          <label class="form-label mb-1">Médico</label>
-          <input type="text" name="medico" id="medico" class="form-control" value="{{ old('medico') }}" placeholder="Buscar médico (min. 2 letras)" autocomplete="off">
-        </div>
-        <div class="col-12 col-md-4">
-          <input type="hidden" name="cod_formula" value="{{ $codFormula ?? '' }}">
-        </div>
-      </div>
+
+  <div class="col-12 col-md-4">
+    <label class="form-label mb-1">Nombre etiqueta</label>
+    <input type="text" name="nombre_etiqueta" class="form-control"
+           value="{{ old('nombre_etiqueta') }}"
+           placeholder="Ej. SUEÑO PROFUNDO" autocomplete="off">
+  </div>
+
+  <div class="col-12 col-md-4">
+    <label class="form-label mb-1">Médico</label>
+    <input type="text" name="medico" id="medico" class="form-control"
+           value="{{ old('medico') }}"
+           placeholder="Buscar médico (min. 2 letras)" autocomplete="off">
+  </div>
+
+  <div class="col-12 col-md-4">
+    <label class="form-label mb-1">Tipo de cápsula</label>
+    <select id="capsulaSelect" class="form-select">
+      <option value="auto" {{ ($capsulaReq ?? 'auto') === 'auto' ? 'selected' : '' }}>
+        Automático (menor estearato)
+      </option>
+      <option value="00" {{ ($capsulaReq ?? 'auto') === '00' ? 'selected' : '' }}>
+        CAP 00
+      </option>
+      <option value="0" {{ ($capsulaReq ?? 'auto') === '0' ? 'selected' : '' }}>
+        CAP 0
+      </option>
+    </select>
+
+    {{-- Se envía al guardar() --}}
+    <input type="hidden" name="capsula" id="capsulaHidden" value="{{ $capsulaReq ?? 'auto' }}">
+
+    <input type="hidden" name="cod_formula" value="{{ $codFormula ?? '' }}">
+  </div>
+
+</div>
+
 
       {{-- Enviar precios y tomas para guardarlos --}}
       <input type="hidden" name="precio_medico"       value="{{ $precio_med ?? 0 }}">
@@ -98,9 +122,32 @@
         : $precio_med_v * 1.33;
     @endphp
 
-    <p><strong>Precio Médico:</strong> {{ number_format($precio_med_v, 2) }}</p>
+    {{-- <p><strong>Precio Médico:</strong> {{ number_format($precio_med_v, 2) }}</p>
     <p><strong>Precio Público:</strong> {{ number_format($precio_pvp_v, 2) }}</p>
-    <p><strong>Precio Distribuidor:</strong> {{ number_format($precio_dis_v, 2) }}</p>
+    <p><strong>Precio Distribuidor:</strong> {{ number_format($precio_dis_v, 2) }}</p> --}}
+
+    <div class="row g-2">
+      <div class="col-12 col-md-4">
+        <label class="form-label">Precio Médico</label>
+        <input type="number" step="0.01" min="0" id="precio_med_input"
+              class="form-control"
+              value="{{ number_format($precio_med_v, 2, '.', '') }}">
+        <small class="text-muted">Edita este valor; los demás se recalculan automáticamente.</small>
+      </div>
+
+      <div class="col-12 col-md-4">
+        <label class="form-label">Precio Público</label>
+        <input type="text" id="precio_pvp_out" class="form-control" readonly
+              value="{{ number_format($precio_pvp_v, 2, '.', '') }}">
+      </div>
+
+      <div class="col-12 col-md-4">
+        <label class="form-label">Precio Distribuidor</label>
+        <input type="text" id="precio_dis_out" class="form-control" readonly
+              value="{{ number_format($precio_dis_v, 2, '.', '') }}">
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -316,6 +363,113 @@
     </div>
     {{-- ===== /Detalle de la fórmula PESAJE===== --}}
 @endif
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  // =========================
+  // 1) Selector de cápsula → recarga con querystring
+  // =========================
+  const capsSel = document.getElementById('capsulaSelect');
+  const capsHid = document.getElementById('capsulaHidden');
+
+  if (capsSel) {
+    capsSel.addEventListener('change', () => {
+      const val = capsSel.value || 'auto';
+      if (capsHid) capsHid.value = val;
+
+      const url = new URL(window.location.href);
+      url.searchParams.set('capsula', val);
+      window.location.href = url.toString();
+    });
+  }
+
+  // =========================
+  // 2) Precio médico editable → recalcula y sincroniza hidden
+  // =========================
+  const medInput = document.getElementById('precio_med_input');
+  const pvpOut   = document.getElementById('precio_pvp_out');
+  const disOut   = document.getElementById('precio_dis_out');
+
+  const hidMed = document.querySelector("input[name='precio_medico']");
+  const hidPvp = document.querySelector("input[name='precio_publico']");
+  const hidDis = document.querySelector("input[name='precio_distribuidor']");
+
+  const round2 = (n) => (Math.round((n + Number.EPSILON) * 100) / 100).toFixed(2);
+
+  const recalcPrecios = () => {
+    if (!medInput) return;
+
+    let med = parseFloat(medInput.value || '0');
+    if (isNaN(med)) med = 0;
+
+    // Mantener piso $10 si aplica (coherente con tu backend)
+    //if (med > 0 && med < 10) med = 10;
+    // Piso $12: si es menor a 12, sube a 12 automáticamente
+    if (med > 0 && med < 12) med = 12;
+
+
+    const dis = med * 0.65;
+    const pvp = med * (4 / 3);
+
+    medInput.value = round2(med);
+    if (disOut) disOut.value = round2(dis);
+    if (pvpOut) pvpOut.value = round2(pvp);
+
+    if (hidMed) hidMed.value = round2(med);
+    if (hidDis) hidDis.value = round2(dis);
+    if (hidPvp) hidPvp.value = round2(pvp);
+  };
+
+  if (medInput) {
+    medInput.addEventListener('input', recalcPrecios);
+    recalcPrecios(); // inicial
+  }
+
+  // =========================
+  // 3) Normalización de inputs a mayúsculas (con fix paciente)
+  // =========================
+  const soloMayusculas = (input, permitirTodo = false) => {
+    if (!input) return;
+    input.addEventListener("input", () => {
+      let valor = input.value
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .toUpperCase();
+
+      if (!permitirTodo) {
+        valor = valor.replace(/[^A-Z\s]/g, "");
+      }
+
+      input.value = valor;
+    });
+  };
+
+  soloMayusculas(document.querySelector("[name='nombre_etiqueta']"), true);
+  soloMayusculas(document.querySelector("[name='medico']"));
+
+  const pac = document.querySelector("[name='paciente']");
+  if (pac) soloMayusculas(pac);
+
+});
+</script>
+
+<script>
+$(function() {
+  $("#medico").autocomplete({
+    source: function(request, response) {
+      $.ajax({
+        url: "{{ route('medicos.buscar') }}",
+        data: { q: request.term },
+        success: function(data) {
+          response(data);
+        }
+      });
+    },
+    minLength: 2
+  });
+});
+</script>
+
 
     <script>
       document.addEventListener("DOMContentLoaded", () => {

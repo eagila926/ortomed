@@ -336,7 +336,7 @@ class FormulaController extends Controller
 
             $precio_med = max(10, ($totalGeneral * 30)+2); // piso $10
             $precio_dis = $precio_med * 0.65;
-            $precio_pvp = $precio_med * 1.33;
+            $precio_pvp = round($precio_med * (4 / 3), 2);
 
             return view('formulas.resumen_sobres', [
                 'rows'            => $rows,
@@ -357,19 +357,27 @@ class FormulaController extends Controller
         // =========================
         $items  = ActivoTemp::where('user_id', $userId)->orderBy('id')->get();
 
-        // ➜ Necesitamos densidad para calcular volúmenes
-        $catalogo = Activo::whereIn('cod_odoo', $items->pluck('cod_odoo'))
+        // NUEVO: override por querystring: auto|00|0
+        $capsulaReq = $request->query('capsula', 'auto');
+        $capsulaReq = in_array($capsulaReq, ['auto','00','0'], true) ? $capsulaReq : 'auto';
+
+        // Catálogo: temporales + filas fijas que se agregan
+        $codes = $items->pluck('cod_odoo')->map(fn($c)=>(int)$c)->all();
+        $codes = array_unique(array_merge($codes, [1101,1077,1078,1219,1220]));
+
+        // ➜ Necesitamos densidad para calcular volúmenes + nombres de estearato/caps/pastillero
+        $catalogo = Activo::whereIn('cod_odoo', $codes)
             ->get(['cod_odoo','nombre','valor_costo','factor','factor_venta','densidad'])
             ->keyBy('cod_odoo');
 
-        // Constantes de capacidad por cápsula (ml) y densidad estearato (g/ml)
+        // Constantes
         $CAP_VOL_00 = 0.95;   // ml
         $CAP_VOL_0  = 0.68;   // ml
         $D_EST      = 0.3228; // g/ml
 
-        $totalMgDia            = 0.0;  // para compatibilidad de costos (si lo usas)
-        $totalVolMlDia         = 0.0;  // suma de volúmenes diarios de activos
-        $totalMasaMesActivos_g = 0.0;  // suma de masa mensual (g) de activos
+        $totalMgDia            = 0.0;  // (costos)
+        $totalVolMlDia         = 0.0;  // (ml/día activos)
+        $totalMasaMesActivos_g = 0.0;  // (g/mes activos)
 
         $rows = $items->map(function ($r) use (&$totalMgDia, &$totalVolMlDia, &$totalMasaMesActivos_g, $catalogo) {
             $mgDia = match ($r->unidad) {
@@ -382,120 +390,111 @@ class FormulaController extends Controller
                 default => 0.0,
             };
 
-            $a             = $catalogo->get($r->cod_odoo);
+            $a             = $catalogo->get((int)$r->cod_odoo);
             $valor_costo   = (float)($a->valor_costo  ?? 0.0);
             $factor        = (float)($a->factor       ?? 1.0);
             $factor_venta  = (float)($a->factor_venta ?? 1.0);
             $densidad      = (float)($a->densidad     ?? 0.0); // g/ml
 
-            // Cantidad total (mg) con factor: esto es lo que usarás para "cant. total"
-            // Cantidad total (mg) con factor
+            // Cantidad total con factor
             $mgTotalDia = $mgDia * $factor;
 
-            // Costos SIN factor (como lo tenías)
+            // Costos SIN factor (como lo tienes)
             $subtotal = round($mgDia * $valor_costo * $factor_venta, 6);
 
-            // ====== NUEVO: todo CON factor para pesaje ======
-            $gDiaTotal = $mgTotalDia / 1000.0;      // g/día (CON factor)  → Cant. total
-            $gMesTotal = $gDiaTotal * 30.0;         // g/mes (CON factor)  → Masa f Mes
-
-            // Volumen (ml/día) = g/día (con factor) / densidad
+            // Pesaje CON factor
+            $gDiaTotal = $mgTotalDia / 1000.0;      // g/día
+            $gMesTotal = $gDiaTotal * 30.0;         // g/mes
             $volMlDia  = ($densidad > 0) ? ($gDiaTotal / $densidad) : 0.0;
 
-            // Acumuladores
-            $totalMgDia            += $mgDia;       // se mantiene para costos
+            $totalMgDia            += $mgDia;
             $totalVolMlDia         += $volMlDia;
-            $totalMasaMesActivos_g += $gMesTotal;   // ahora acumula g/mes CON factor
+            $totalMasaMesActivos_g += $gMesTotal;
 
             return [
-                'cod_odoo'          => $r->cod_odoo,
-                'activo'            => $r->activo,
+                'cod_odoo'          => (int)$r->cod_odoo,
+                'activo'            => (string)$r->activo,
                 'cantidad'          => (float)$r->cantidad,
-                'unidad'            => $r->unidad,
+                'unidad'            => (string)$r->unidad,
                 'mg'                => $mgDia,
+
                 'valor_costo'       => $valor_costo,
                 'factor_venta'      => $factor_venta,
 
-                // mantiene compatibilidad con otras tablas
-                'cantidad_total'    => $mgTotalDia,           // mg/día CON factor
+                'cantidad_total'    => $mgTotalDia,      // mg/día con factor
+                'subtotal'          => $subtotal,        // $/día sin factor
 
-                'subtotal'          => $subtotal,             // $/día SIN factor
-                'densidad'          => $densidad,             // g/ml
-
-                // ====== CLAVES PARA LA TABLA DE PESAJE ======
-                'cant_total_pesaje' => $gDiaTotal,            // g/día CON factor
-                'vol_ml'            => $volMlDia,             // ml/día
-                'masa_mes'          => $gMesTotal,            // g/mes CON factor
+                'densidad'          => $densidad,
+                'cant_total_pesaje' => $gDiaTotal,       // g/día con factor
+                'vol_ml'            => $volMlDia,        // ml/día
+                'masa_mes'          => $gMesTotal,       // g/mes con factor
             ];
-
         });
 
-        // Totales actuales (antes de añadir estearato/cápsulas)
+        // Totales base (antes de añadir estearato/cápsulas/pastillero)
         $totalGeneral = (float)collect($rows)->sum('subtotal'); // $/día
-        $totalVolMl   = (float)collect($rows)->sum('vol_ml');   // ml/día
+        $totalVolMl   = (float)collect($rows)->sum('vol_ml');   // ml/día (activos)
         $totalMasaMes = (float)collect($rows)->sum('masa_mes'); // g/mes (activos)
 
         // Cálculo de cápsulas por volumen
         $capsDia_00 = (int)ceil($totalVolMl / $CAP_VOL_00);
         $capsDia_0  = (int)ceil($totalVolMl / $CAP_VOL_0);
 
-        // Capacidad de volumen mensual disponible por opción (ml/mes)
         $capVolMes_00 = $capsDia_00 * $CAP_VOL_00 * 30.0;
         $capVolMes_0  = $capsDia_0  * $CAP_VOL_0  * 30.0;
 
-        // Volumen real necesario al mes por activos (ml/mes)
         $volNecesarioMes = $totalVolMl * 30.0;
 
-        // Volumen faltante (para estearato) por opción
         $volFaltante_00 = max(0.0, $capVolMes_00 - $volNecesarioMes);
         $volFaltante_0  = max(0.0, $capVolMes_0  - $volNecesarioMes);
 
-        // Masa base de estearato (g/mes) por opción = vol faltante * densidad estearato
         $esteratoBase_gMes_00 = $volFaltante_00 * $D_EST;
         $esteratoBase_gMes_0  = $volFaltante_0  * $D_EST;
 
-        // ➜ + 9.5% de la masa total mensual de activos
         $bonus95_g = $totalMasaMes * 0.095;
 
         $esteratoTotal_gMes_00 = $esteratoBase_gMes_00 + $bonus95_g;
         $esteratoTotal_gMes_0  = $esteratoBase_gMes_0  + $bonus95_g;
 
-        // Elegir cápsula por menor estearato
-        if ($esteratoTotal_gMes_00 <= $esteratoTotal_gMes_0) {
+        // Selección final respetando override
+        $autoElegida  = ($esteratoTotal_gMes_00 <= $esteratoTotal_gMes_0) ? '00' : '0';
+        $finalElegida = ($capsulaReq === 'auto') ? $autoElegida : $capsulaReq;
+
+        if ($finalElegida === '00') {
             $capsulaElegida      = '00';
             $capsDiaElegida      = $capsDia_00;
             $totalCapsElegida    = $capsDia_00 * 30;
             $esteratoFinal_gMes  = $esteratoTotal_gMes_00;
-            $capacidadTotalFinal = $capVolMes_00; // ml/mes
+            $capacidadTotalFinal = $capVolMes_00;
             $capsCod             = 1078;
         } else {
             $capsulaElegida      = '0';
             $capsDiaElegida      = $capsDia_0;
             $totalCapsElegida    = $capsDia_0 * 30;
             $esteratoFinal_gMes  = $esteratoTotal_gMes_0;
-            $capacidadTotalFinal = $capVolMes_0; // ml/mes
+            $capacidadTotalFinal = $capVolMes_0;
             $capsCod             = 1077;
         }
 
-        // Añadir fila ESTEARATO (masa final mes en g; cantidad en mg)
+        // Añadir fila ESTEARATO
         $rows = collect($rows);
         $rows->push([
             'cod_odoo'          => 1101,
             'activo'            => $catalogo->get(1101)->nombre ?? 'ESTEARATO DE MAGNESIO',
-            'cantidad'          => (float)($esteratoFinal_gMes * 1000.0)/30, // mg/mes
+            'cantidad'          => ((float)($esteratoFinal_gMes * 1000.0) / 30.0), // mg/día aprox (para mostrar)
             'unidad'            => 'mg',
-            'mg'                => $esteratoFinal_gMes * 1000.0,
+            'mg'                => $esteratoFinal_gMes * 1000.0, // mg/mes (si lo usas en otra tabla)
             'valor_costo'       => (float)($catalogo->get(1101)->valor_costo ?? 0),
             'factor_venta'      => (float)($catalogo->get(1101)->factor_venta ?? 1),
             'cantidad_total'    => $esteratoFinal_gMes * 1000.0,
             'subtotal'          => 0,
-            'densidad'          => $D_EST, // g/ml
-            'cant_total_pesaje' => $esteratoFinal_gMes / 30.0,    // g/día (aprox)
-            'vol_ml'            => $esteratoFinal_gMes / $D_EST / 30.0, // ml/día aprox
-            'masa_mes'          => $esteratoFinal_gMes,           // g/mes
+            'densidad'          => $D_EST,
+            'cant_total_pesaje' => $esteratoFinal_gMes / 30.0,                 // g/día aprox
+            'vol_ml'            => ($esteratoFinal_gMes / $D_EST) / 30.0,       // ml/día aprox
+            'masa_mes'          => $esteratoFinal_gMes,                         // g/mes
         ]);
 
-        // Añadir fila CÁPSULAS (unidades)
+        // Añadir fila CÁPSULAS
         $rows->push([
             'cod_odoo'          => $capsCod,
             'activo'            => $catalogo->get($capsCod)->nombre ?? ('CÁPSULA '.$capsulaElegida),
@@ -512,18 +511,18 @@ class FormulaController extends Controller
             'masa_mes'          => null,
         ]);
 
-        // Pastillero 
+        // Pastillero
         if ($capsulaElegida === '00') { $capSmall = 30; $capLarge = 90; }
         else                          { $capSmall = 60; $capLarge = 150; }
 
         $needed = (int)$totalCapsElegida;
-        if    ($needed <= $capSmall)     { $pastCod = 1219; $pastCount = 1; }
-        elseif($needed <= $capLarge)     { $pastCod = 1219; $pastCount = 1; }
-        else                             { $pastCod = 1219; $pastCount = (int)ceil($needed / $capLarge); }
+        if    ($needed <= $capSmall) { $pastCod = 1219; $pastCount = 1; }
+        elseif($needed <= $capLarge) { $pastCod = 1219; $pastCount = 1; }
+        else                         { $pastCod = 1219; $pastCount = (int)ceil($needed / $capLarge); }
 
         $rows->push([
             'cod_odoo'          => $pastCod,
-            'activo'            => 'PASTILLERO',
+            'activo'            => $catalogo->get($pastCod)->nombre ?? 'PASTILLERO',
             'cantidad'          => $pastCount,
             'unidad'            => 'und',
             'mg'                => null,
@@ -537,14 +536,15 @@ class FormulaController extends Controller
             'masa_mes'          => null,
         ]);
 
-        // Totales finales
-        $totalVolMl   = (float)$rows->sum('vol_ml');   // ml/día (incluye aprox del estearato)
-        $totalMasaMes = (float)$rows->sum('masa_mes'); // g/mes (incluye estearato)
+        // Totales finales (incluye aprox de estearato)
+        $totalVolMl   = (float)$rows->sum('vol_ml');
+        $totalMasaMes = (float)$rows->sum('masa_mes');
 
-        // Precios (mantengo tu criterio actual)
-        $precio_med = max(10, $totalGeneral * 30);
+        // Precios (tu criterio actual)
+        //$precio_med = max(10, $totalGeneral * 30);
+        $precio_med = max(12, $totalGeneral * 30);
         $precio_dis = $precio_med * 0.65;
-        $precio_pvp = $precio_med * 1.33;
+        $precio_pvp = round($precio_med * (4 / 3), 2);
 
         $codFormula = $this->buildCodFormula();
 
@@ -553,25 +553,32 @@ class FormulaController extends Controller
             'totalMg'            => $totalMgDia,
             'totalVolMl'         => $totalVolMl,
             'totalMasaMes'       => $totalMasaMes,
+
+            // auditoría
             'capsDia95'          => $capsDia_00,
             'capsDia68'          => $capsDia_0,
             'totalCaps95'        => $capsDia_00 * 30,
             'totalCaps68'        => $capsDia_0  * 30,
-            'capacidadTotal95'   => $capVolMes_00, // ml/mes
-            'capacidadTotal68'   => $capVolMes_0,  // ml/mes
-            'esterato95'         => $esteratoTotal_gMes_00 * 1000.0, // mg/mes para mostrar si quieres
+            'capacidadTotal95'   => $capVolMes_00,
+            'capacidadTotal68'   => $capVolMes_0,
+            'esterato95'         => $esteratoTotal_gMes_00 * 1000.0,
             'esterato68'         => $esteratoTotal_gMes_0  * 1000.0,
+
             'capsulaElegida'     => $capsulaElegida,
             'capsDiaElegida'     => $capsDiaElegida,
             'totalCapsElegida'   => $totalCapsElegida,
-            'esteratoFinal'      => $esteratoFinal_gMes * 1000.0, // mg/mes
-            'capacidadTotalFinal'=> $capacidadTotalFinal,         // ml/mes
-            'volMes'             => $volNecesarioMes,             // ml/mes de activos
+            'esteratoFinal'      => $esteratoFinal_gMes * 1000.0,
+            'capacidadTotalFinal'=> $capacidadTotalFinal,
+            'volMes'             => $volNecesarioMes,
+
             'totalGeneral'       => $totalGeneral,
             'precio_med'         => round($precio_med, 2),
             'precio_dis'         => round($precio_dis, 2),
             'precio_pvp'         => round($precio_pvp, 2),
             'codFormula'         => $codFormula,
+
+            // NUEVO: para marcar el selector en el Blade
+            'capsulaReq'         => $capsulaReq,
         ]);
 
     }
@@ -579,225 +586,246 @@ class FormulaController extends Controller
     // =================== Guardar cabecera de fórmula ===================
 
     public function guardar(Request $request)
-    {
-        $request->validate([
-            'nombre_etiqueta' => ['required','string','max:150'],
-            'medico'          => ['required','regex:/^[A-Z\s]+$/'],
-        ], [
-            'regex' => 'Solo se permiten letras mayúsculas sin acentos ni símbolos.',
-        ]);
+{
+    $request->validate([
+        'nombre_etiqueta' => ['required','string','max:150'],
+        'medico'          => ['required','regex:/^[A-Z\s]+$/'],
+    ], [
+        'regex' => 'Solo se permiten letras mayúsculas sin acentos ni símbolos.',
+    ]);
 
-        $request->validate([
-            'cod_formula'           => ['required','string','max:30'],
-            'nombre_etiqueta'       => ['nullable','string','max:150'],
-            'medico'                => ['nullable','string','max:120'],
-            // 'paciente'           => ['nullable','string','max:120'],
-            'precio_medico'         => ['nullable','numeric'],
-            'precio_publico'        => ['nullable','numeric'],
-            'precio_distribuidor'   => ['nullable','numeric'],
-            'tomas_diarias'         => ['nullable','numeric'],
-        ]);
+    $request->validate([
+        'cod_formula'           => ['required','string','max:30'],
+        'nombre_etiqueta'       => ['nullable','string','max:150'],
+        'medico'                => ['nullable','string','max:120'],
+        // 'paciente'            => ['nullable','string','max:120'],
+        'precio_medico'         => ['nullable','numeric'],
+        'precio_publico'        => ['nullable','numeric'],
+        'precio_distribuidor'   => ['nullable','numeric'],
+        'tomas_diarias'         => ['nullable','numeric'],
 
-        $userId = Auth::id();
-        if (!$userId) abort(401);
+        // NUEVO: cápsula seleccionada en el resumen
+        'capsula'               => ['nullable','in:auto,00,0'],
+    ]);
 
-        // Re-generar el código en backend para evitar manipulación
-        $codigoBackend = $this->buildCodFormula();
+    $userId = Auth::id();
+    if (!$userId) abort(401);
 
-        $formulaId = DB::transaction(function () use ($request, $userId, $codigoBackend) {
+    // Re-generar el código en backend para evitar manipulación
+    $codigoBackend = $this->buildCodFormula();
 
-            // 1) Guardar cabecera
-            $precio_medico       = max(10, (float)$request->input('precio_medico', 0));
-            $precio_publico      = (float)$request->input('precio_publico', 0);
-            $precio_distribuidor = (float)$request->input('precio_distribuidor', 0);
-
-            $formula = Formula::create([
-                'codigo'              => $codigoBackend,
-                'nombre_etiqueta'     => $request->input('nombre_etiqueta'),
-                'user_id'             => $userId,
-                'precio_medico'       => round($precio_medico, 2),
-                'precio_publico'      => round($precio_publico, 2),
-                'precio_distribuidor' => round($precio_distribuidor, 2),
-                'medico'              => $request->input('medico'),
-                'paciente'            => $request->input('paciente'),
-                'tomas_diarias'       => (float)$request->input('tomas_diarias', 0),
-            ]);
-
-            // 2) Calcular filas (activos + esterato + cápsulas + pastillero)
-            $rows = $this->calcularFilasParaGuardar($userId);
-
-            // 3) Insertar items
-            $now = now();
-            $insert = $rows->map(function ($r) use ($codigoBackend, $now) {
-                return [
-                    'codigo'     => $codigoBackend,
-                    'cod_odoo'   => (int)($r['cod_odoo'] ?? 0),
-                    'activo'     => (string)($r['activo'] ?? ''),
-                    'unidad'     => $r['unidad'] ?? null,
-                    'masa_mes'   => isset($r['masa_mes']) ? (float)$r['masa_mes'] : null,
-                    'cantidad'   => isset($r['cantidad']) ? (float)$r['cantidad'] : null,
-                    'created_at' => $now,
-                    'updated_at' => $now,
-                ];
-            })->all();
-
-            if (!empty($insert)) {
-                FormulaItem::insert($insert);
-            }
-
-            // 4) Limpiar temporales
-            ActivoTemp::where('user_id', $userId)->delete();
-
-            // DEVUELVE ID para usarlo fuera de la transacción
-            return (int) $formula->id;
-        });
-
-        // 5) Añadir automáticamente a "Fórmulas Establecidas" (sesión)
-        $sessionKey = \App\Http\Controllers\FormulasEstController::SESSION_KEY;
-
-        $items = $request->session()->get($sessionKey, []); // [['id'=>1,'tipo'=>null], ...]
-        if (!collect($items)->firstWhere('id', $formulaId)) {
-            $items[] = ['id' => $formulaId, 'tipo' => null];
-            $request->session()->put($sessionKey, $items);
-        }
-
-        // 6) Redirigir a la vista de Fórmulas Establecidas
-        return redirect()
-            ->route('fe.index')
-            ->with('ok', 'Fórmula guardada y añadida a Fórmulas Establecidas.');
+    $capsulaReq = $request->input('capsula', 'auto');
+    if (!in_array($capsulaReq, ['auto','00','0'], true)) {
+        $capsulaReq = 'auto';
     }
 
+    $formulaId = DB::transaction(function () use ($request, $userId, $codigoBackend, $capsulaReq) {
 
-    private function calcularFilasParaGuardar(int $userId): \Illuminate\Support\Collection
-    {
-        $items = ActivoTemp::where('user_id', $userId)->orderBy('id')->get();
+        // 1) Guardar cabecera
+        $precio_medico = max(12, (float)$request->input('precio_medico', 0));
+        $precio_publico      = (float)$request->input('precio_publico', 0);
+        $precio_distribuidor = (float)$request->input('precio_distribuidor', 0);
 
-        // Necesitamos densidad para volumen
-        $catalogo = Activo::whereIn('cod_odoo', $items->pluck('cod_odoo'))
-            ->get(['cod_odoo','nombre','valor_costo','factor','factor_venta','densidad'])
-            ->keyBy('cod_odoo');
+        $formula = Formula::create([
+            'codigo'              => $codigoBackend,
+            'nombre_etiqueta'     => $request->input('nombre_etiqueta'),
+            'user_id'             => $userId,
+            'precio_medico'       => round($precio_medico, 2),
+            'precio_publico'      => round($precio_publico, 2),
+            'precio_distribuidor' => round($precio_distribuidor, 2),
+            'medico'              => $request->input('medico'),
+            'paciente'            => $request->input('paciente'),
+            'tomas_diarias'       => (float)$request->input('tomas_diarias', 0),
+        ]);
 
-        $CAP_VOL_00 = 0.95;   // ml por cápsula
-        $CAP_VOL_0  = 0.68;   // ml por cápsula
-        $D_EST      = 0.3228; // g/ml
+        // 2) Calcular filas (activos + esterato + cápsulas + pastillero) RESPETANDO capsulaReq
+        $rows = $this->calcularFilasParaGuardar($userId, $capsulaReq);
 
-        $rows = collect();
+        // 3) Insertar items
+        $now = now();
+        $insert = $rows->map(function ($r) use ($codigoBackend, $now) {
+            return [
+                'codigo'     => $codigoBackend,
+                'cod_odoo'   => (int)($r['cod_odoo'] ?? 0),
+                'activo'     => (string)($r['activo'] ?? ''),
+                'unidad'     => $r['unidad'] ?? null,
+                'masa_mes'   => isset($r['masa_mes']) ? (float)$r['masa_mes'] : null,
+                'cantidad'   => isset($r['cantidad']) ? (float)$r['cantidad'] : null,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        })->all();
 
-        $volDiaTotal_ml        = 0.0; // suma de vol diarios (activos)
-        $masaMesActivosTotal_g = 0.0; // g/mes (activos)
-
-        // 1) Activos base (por día → masa/mes y volumen/día para la suma)
-        foreach ($items as $r) {
-            $mgDia = match ($r->unidad) {
-                'g'   => (float)$r->cantidad * 1000,
-                'mg'  => (float)$r->cantidad,
-                'mcg' => (float)$r->cantidad / 1000,
-                'UI'  => ((int)$r->cod_odoo === 1343) ? ((float)$r->cantidad * 0.000025 / 1000)
-                                                    : ((float)$r->cantidad * 0.00067),
-                default => 0.0,
-            };
-
-            $a        = $catalogo->get($r->cod_odoo);
-            $factor   = (float)($a->factor   ?? 1.0);
-            $densidad = (float)($a->densidad ?? 0.0); // g/ml
-
-            // CON factor
-            $mgDiaTotal = $mgDia * $factor;
-            $gDiaTotal  = $mgDiaTotal / 1000.0;          // g/día CON factor  → Cant. total
-            $gMesTotal  = $gDiaTotal * 30.0;             // g/mes  CON factor  → Masa f Mes
-            $volMlDia   = ($densidad > 0) ? ($gDiaTotal / $densidad) : 0.0;
-
-            $volDiaTotal_ml        += $volMlDia;
-            $masaMesActivosTotal_g += $gMesTotal;
-
-            $rows->push([
-                'cod_odoo'          => $r->cod_odoo,
-                'activo'            => $r->activo,
-                'unidad'            => $r->unidad,
-                'cantidad'          => (float)$r->cantidad, // por día
-                'masa_mes'          => $gMesTotal,          // **g/mes CON factor**
-                'cant_total_pesaje' => $gDiaTotal,          // **g/día CON factor**
-                'vol_ml'            => $volMlDia,           // ml/día
-            ]);
-
+        if (!empty($insert)) {
+            FormulaItem::insert($insert);
         }
 
-        // 2) Cálculo por volumen de cápsulas y estearato (+9.5%)
-        $capsDia_00    = (int)ceil($volDiaTotal_ml / $CAP_VOL_00);
-        $capsDia_0     = (int)ceil($volDiaTotal_ml / $CAP_VOL_0);
-        $capsMes_00    = $capsDia_00 * 30;
-        $capsMes_0     = $capsDia_0  * 30;
+        // 4) Limpiar temporales
+        ActivoTemp::where('user_id', $userId)->delete();
 
-        $capVolMes_00  = $capsDia_00 * $CAP_VOL_00 * 30.0; // ml/mes
-        $capVolMes_0   = $capsDia_0  * $CAP_VOL_0  * 30.0; // ml/mes
-        $volNecesarioMes = $volDiaTotal_ml * 30.0;         // ml/mes
+        return (int) $formula->id;
+    });
 
-        $volFalt_00    = max(0.0, $capVolMes_00 - $volNecesarioMes);
-        $volFalt_0     = max(0.0, $capVolMes_0  - $volNecesarioMes);
+    // 5) Añadir automáticamente a "Fórmulas Establecidas" (sesión)
+    $sessionKey = \App\Http\Controllers\FormulasEstController::SESSION_KEY;
 
-        $esteratoBase_gMes_00 = $volFalt_00 * $D_EST;
-        $esteratoBase_gMes_0  = $volFalt_0  * $D_EST;
-
-        $bonus95_g = $masaMesActivosTotal_g * 0.095;
-
-        $esterato_gMes_00 = $esteratoBase_gMes_00 + $bonus95_g;
-        $esterato_gMes_0  = $esteratoBase_gMes_0  + $bonus95_g;
-
-        if ($esterato_gMes_00 <= $esterato_gMes_0) {
-            $capsulaElegida   = '00';
-            $totalCapsElegida = $capsMes_00;
-            $esteratoFinal_g  = $esterato_gMes_00;
-            $capsCod          = 1078;
-        } else {
-            $capsulaElegida   = '0';
-            $totalCapsElegida = $capsMes_0;
-            $esteratoFinal_g  = $esterato_gMes_0;
-            $capsCod          = 1077;
-        }
-
-        // 2.a) Estearato (guardar masa_mes en g; cantidad en mg)
-        $rows->push([
-            'cod_odoo'          => 1101,
-            'activo'            => $catalogo->get(1101)->nombre ?? 'ESTEARATO DE MAGNESIO',
-            'unidad'            => 'mg',
-            'cantidad'          => (float)($esteratoFinal_g * 1000.0), // mg/mes
-            'masa_mes'          => (float)$esteratoFinal_g,            // g/mes
-            'cant_total_pesaje' => (float)($esteratoFinal_g / 30.0),   // g/día
-            'vol_ml'            => (float)($esteratoFinal_g / $D_EST / 30.0), // ml/día aprox
-        ]);
-
-        // 2.b) Cápsulas (unidades)
-        $rows->push([
-            'cod_odoo'          => $capsCod,
-            'activo'            => $catalogo->get($capsCod)->nombre ?? ('CAPSULA '.$capsulaElegida),
-            'unidad'            => 'und',
-            'cantidad'          => (float)$totalCapsElegida,
-            'masa_mes'          => $totalCapsElegida,
-            'cant_total_pesaje' => $totalCapsElegida,
-            'vol_ml'            => null,
-        ]);
-
-        // 2.c) Pastillero (igual que antes)
-        if ($capsulaElegida === '00') { $capSmall=30; $capLarge=90; }
-        else                          { $capSmall=60; $capLarge=150; }
-
-        $need = (int)$totalCapsElegida;
-        if    ($need <= $capSmall)     { $pastCod=1219; $pastCount=1; }
-        elseif($need <= $capLarge)     { $pastCod=1219; $pastCount=1; }
-        else                           { $pastCod=1219; $pastCount=(int)ceil($need/$capLarge); }
-
-        $rows->push([
-            'cod_odoo'          => $pastCod,
-            'activo'            => $catalogo->get($pastCod)->nombre ?? 'PASTILLERO',
-            'unidad'            => 'und',
-            'cantidad'          => (float)$pastCount,
-            'masa_mes'          => $pastCount,
-            'cant_total_pesaje' => $pastCount,
-            'vol_ml'            => null,
-        ]);
-
-        return $rows;
+    $items = $request->session()->get($sessionKey, []);
+    if (!collect($items)->firstWhere('id', $formulaId)) {
+        $items[] = ['id' => $formulaId, 'tipo' => null];
+        $request->session()->put($sessionKey, $items);
     }
+
+    // 6) Redirigir a la vista de Fórmulas Establecidas
+    return redirect()
+        ->route('fe.index')
+        ->with('ok', 'Fórmula guardada y añadida a Fórmulas Establecidas.');
+}
+
+
+
+    private function calcularFilasParaGuardar(int $userId, string $capsulaReq = 'auto'): \Illuminate\Support\Collection
+{
+    if (!in_array($capsulaReq, ['auto','00','0'], true)) {
+        $capsulaReq = 'auto';
+    }
+
+    $items = ActivoTemp::where('user_id', $userId)->orderBy('id')->get();
+
+    // Catálogo: temporales + filas fijas que se agregan
+    $codes = $items->pluck('cod_odoo')->map(fn($c)=>(int)$c)->all();
+    $codes = array_unique(array_merge($codes, [1101,1077,1078,1219,1220]));
+
+    $catalogo = Activo::whereIn('cod_odoo', $codes)
+        ->get(['cod_odoo','nombre','valor_costo','factor','factor_venta','densidad'])
+        ->keyBy('cod_odoo');
+
+    $CAP_VOL_00 = 0.95;   // ml por cápsula
+    $CAP_VOL_0  = 0.68;   // ml por cápsula
+    $D_EST      = 0.3228; // g/ml
+
+    $rows = collect();
+
+    $volDiaTotal_ml        = 0.0; // suma de vol diarios (activos)
+    $masaMesActivosTotal_g = 0.0; // g/mes (activos)
+
+    // 1) Activos base (por día → masa/mes y volumen/día para la suma)
+    foreach ($items as $r) {
+        $mgDia = match ($r->unidad) {
+            'g'   => (float)$r->cantidad * 1000,
+            'mg'  => (float)$r->cantidad,
+            'mcg' => (float)$r->cantidad / 1000,
+            'UI'  => ((int)$r->cod_odoo === 1343)
+                ? ((float)$r->cantidad * 0.000025 / 1000)
+                : ((float)$r->cantidad * 0.00067),
+            default => 0.0,
+        };
+
+        $a        = $catalogo->get((int)$r->cod_odoo);
+        $factor   = (float)($a->factor   ?? 1.0);
+        $densidad = (float)($a->densidad ?? 0.0); // g/ml
+
+        // CON factor
+        $mgDiaTotal = $mgDia * $factor;
+        $gDiaTotal  = $mgDiaTotal / 1000.0;          // g/día CON factor
+        $gMesTotal  = $gDiaTotal * 30.0;             // g/mes  CON factor
+        $volMlDia   = ($densidad > 0) ? ($gDiaTotal / $densidad) : 0.0;
+
+        $volDiaTotal_ml        += $volMlDia;
+        $masaMesActivosTotal_g += $gMesTotal;
+
+        $rows->push([
+            'cod_odoo'          => (int)$r->cod_odoo,
+            'activo'            => (string)$r->activo,
+            'unidad'            => (string)$r->unidad,
+            'cantidad'          => (float)$r->cantidad, // por día (tal como lo ingresan)
+            'masa_mes'          => $gMesTotal,          // g/mes CON factor
+            'cant_total_pesaje' => $gDiaTotal,          // g/día CON factor
+            'vol_ml'            => $volMlDia,           // ml/día
+        ]);
+    }
+
+    // 2) Cálculo por volumen de cápsulas y estearato (+9.5%)
+    $capsDia_00 = (int)ceil($volDiaTotal_ml / $CAP_VOL_00);
+    $capsDia_0  = (int)ceil($volDiaTotal_ml / $CAP_VOL_0);
+
+    $capsMes_00 = $capsDia_00 * 30;
+    $capsMes_0  = $capsDia_0  * 30;
+
+    $capVolMes_00     = $capsDia_00 * $CAP_VOL_00 * 30.0; // ml/mes
+    $capVolMes_0      = $capsDia_0  * $CAP_VOL_0  * 30.0; // ml/mes
+    $volNecesarioMes  = $volDiaTotal_ml * 30.0;           // ml/mes
+
+    $volFalt_00 = max(0.0, $capVolMes_00 - $volNecesarioMes);
+    $volFalt_0  = max(0.0, $capVolMes_0  - $volNecesarioMes);
+
+    $esteratoBase_gMes_00 = $volFalt_00 * $D_EST;
+    $esteratoBase_gMes_0  = $volFalt_0  * $D_EST;
+
+    $bonus95_g = $masaMesActivosTotal_g * 0.095;
+
+    $esterato_gMes_00 = $esteratoBase_gMes_00 + $bonus95_g;
+    $esterato_gMes_0  = $esteratoBase_gMes_0  + $bonus95_g;
+
+    // Selección final respetando override
+    $autoElegida  = ($esterato_gMes_00 <= $esterato_gMes_0) ? '00' : '0';
+    $finalElegida = ($capsulaReq === 'auto') ? $autoElegida : $capsulaReq;
+
+    if ($finalElegida === '00') {
+        $capsulaElegida   = '00';
+        $totalCapsElegida = $capsMes_00;
+        $esteratoFinal_g  = $esterato_gMes_00;
+        $capsCod          = 1078;
+    } else {
+        $capsulaElegida   = '0';
+        $totalCapsElegida = $capsMes_0;
+        $esteratoFinal_g  = $esterato_gMes_0;
+        $capsCod          = 1077;
+    }
+
+    // 2.a) Estearato (masa_mes en g; cantidad en mg/mes)
+    $rows->push([
+        'cod_odoo'          => 1101,
+        'activo'            => $catalogo->get(1101)->nombre ?? 'ESTEARATO DE MAGNESIO',
+        'unidad'            => 'mg',
+        'cantidad'          => (float)($esteratoFinal_g * 1000.0), // mg/mes
+        'masa_mes'          => (float)$esteratoFinal_g,            // g/mes
+        'cant_total_pesaje' => (float)($esteratoFinal_g / 30.0),   // g/día
+        'vol_ml'            => (float)($esteratoFinal_g / $D_EST / 30.0), // ml/día aprox
+    ]);
+
+    // 2.b) Cápsulas (unidades)
+    $rows->push([
+        'cod_odoo'          => $capsCod,
+        'activo'            => $catalogo->get($capsCod)->nombre ?? ('CAPSULA '.$capsulaElegida),
+        'unidad'            => 'und',
+        'cantidad'          => (float)$totalCapsElegida,
+        'masa_mes'          => $totalCapsElegida,
+        'cant_total_pesaje' => $totalCapsElegida,
+        'vol_ml'            => null,
+    ]);
+
+    // 2.c) Pastillero
+    if ($capsulaElegida === '00') { $capSmall = 30; $capLarge = 90; }
+    else                          { $capSmall = 60; $capLarge = 150; }
+
+    $need = (int)$totalCapsElegida;
+    if    ($need <= $capSmall)     { $pastCod = 1219; $pastCount = 1; }
+    elseif($need <= $capLarge)     { $pastCod = 1219; $pastCount = 1; }
+    else                           { $pastCod = 1219; $pastCount = (int)ceil($need / $capLarge); }
+
+    $rows->push([
+        'cod_odoo'          => $pastCod,
+        'activo'            => $catalogo->get($pastCod)->nombre ?? 'PASTILLERO',
+        'unidad'            => 'und',
+        'cantidad'          => (float)$pastCount,
+        'masa_mes'          => $pastCount,
+        'cant_total_pesaje' => $pastCount,
+        'vol_ml'            => null,
+    ]);
+
+    return $rows;
+}
+
 
 
 
