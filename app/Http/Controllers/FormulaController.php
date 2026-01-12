@@ -184,6 +184,26 @@ class FormulaController extends Controller
         return (string) Str::of($texto)->squish()->lower()->ascii();
     }
 
+    /**
+     * Redondea SIEMPRE hacia arriba al siguiente múltiplo de 0.10
+     * Ej: 14.31 -> 14.40 | 14.30 -> 14.30
+     */
+    private function roundUpTenth(float $value): float
+    {
+        return ceil($value * 10) / 10;
+    }
+
+    private function roundUpToStep(float $value, float $step = 0.10): float
+    {
+        if ($step <= 0) return $value;
+
+        // Evita problemas típicos de floats (43.4 puede venir como 43.399999999)
+        $inv = 1 / $step;
+
+        return ceil(($value * $inv) - 1e-9) / $inv;
+    }
+
+
     private function buildCodFormula(): string
     {
         $user = Auth::user();
@@ -334,9 +354,12 @@ class FormulaController extends Controller
             $totalMasaMes = (float)$rows->sum('masa_mes');
             $totalGeneral = (float)$rows->sum('subtotal'); // $/día
 
-            $precio_med = max(10, ($totalGeneral * 30)+2); // piso $10
+            $precio_med = max(12, ($totalGeneral * 30) + 4);
+            $precio_med = $this->roundUpToStep($precio_med, 0.10); // <-- AQUI
+
             $precio_dis = $precio_med * 0.65;
             $precio_pvp = round($precio_med * (4 / 3), 2);
+
 
             return view('formulas.resumen_sobres', [
                 'rows'            => $rows,
@@ -542,9 +565,12 @@ class FormulaController extends Controller
 
         // Precios (tu criterio actual)
         //$precio_med = max(10, $totalGeneral * 30);
-        $precio_med = max(12, $totalGeneral * 30);
+        $precio_med = max(12, ($totalGeneral * 30) + 4); // piso 12
+        $precio_med = $this->roundUpToStep($precio_med, 0.10); // <-- AQUI
+
         $precio_dis = $precio_med * 0.65;
         $precio_pvp = round($precio_med * (4 / 3), 2);
+
 
         $codFormula = $this->buildCodFormula();
 
@@ -586,248 +612,263 @@ class FormulaController extends Controller
     // =================== Guardar cabecera de fórmula ===================
 
     public function guardar(Request $request)
-{
-    $request->validate([
-        'nombre_etiqueta' => ['required','string','max:150'],
-        'medico'          => ['required','regex:/^[A-Z\s]+$/'],
-    ], [
-        'regex' => 'Solo se permiten letras mayúsculas sin acentos ni símbolos.',
-    ]);
-
-    $request->validate([
-        'cod_formula'           => ['required','string','max:30'],
-        'nombre_etiqueta'       => ['nullable','string','max:150'],
-        'medico'                => ['nullable','string','max:120'],
-        // 'paciente'            => ['nullable','string','max:120'],
-        'precio_medico'         => ['nullable','numeric'],
-        'precio_publico'        => ['nullable','numeric'],
-        'precio_distribuidor'   => ['nullable','numeric'],
-        'tomas_diarias'         => ['nullable','numeric'],
-
-        // NUEVO: cápsula seleccionada en el resumen
-        'capsula'               => ['nullable','in:auto,00,0'],
-    ]);
-
-    $userId = Auth::id();
-    if (!$userId) abort(401);
-
-    // Re-generar el código en backend para evitar manipulación
-    $codigoBackend = $this->buildCodFormula();
-
-    $capsulaReq = $request->input('capsula', 'auto');
-    if (!in_array($capsulaReq, ['auto','00','0'], true)) {
-        $capsulaReq = 'auto';
-    }
-
-    $formulaId = DB::transaction(function () use ($request, $userId, $codigoBackend, $capsulaReq) {
-
-        // 1) Guardar cabecera
-        $precio_medico = max(12, (float)$request->input('precio_medico', 0));
-        $precio_publico      = (float)$request->input('precio_publico', 0);
-        $precio_distribuidor = (float)$request->input('precio_distribuidor', 0);
-
-        $formula = Formula::create([
-            'codigo'              => $codigoBackend,
-            'nombre_etiqueta'     => $request->input('nombre_etiqueta'),
-            'user_id'             => $userId,
-            'precio_medico'       => round($precio_medico, 2),
-            'precio_publico'      => round($precio_publico, 2),
-            'precio_distribuidor' => round($precio_distribuidor, 2),
-            'medico'              => $request->input('medico'),
-            'paciente'            => $request->input('paciente'),
-            'tomas_diarias'       => (float)$request->input('tomas_diarias', 0),
+    {
+        $request->validate([
+            'nombre_etiqueta' => ['required','string','max:150'],
+            'medico'          => ['required','regex:/^[A-Z\s]+$/'],
+        ], [
+            'regex' => 'Solo se permiten letras mayúsculas sin acentos ni símbolos.',
         ]);
 
-        // 2) Calcular filas (activos + esterato + cápsulas + pastillero) RESPETANDO capsulaReq
-        $rows = $this->calcularFilasParaGuardar($userId, $capsulaReq);
+        $request->validate([
+            'cod_formula'           => ['required','string','max:30'],
+            'nombre_etiqueta'       => ['nullable','string','max:150'],
+            'medico'                => ['nullable','string','max:120'],
+            'precio_medico'         => ['nullable','numeric'],
+            'precio_publico'        => ['nullable','numeric'],
+            'precio_distribuidor'   => ['nullable','numeric'],
+            'tomas_diarias'         => ['nullable','numeric'],
+            'capsula'               => ['nullable','in:auto,00,0'],
+        ]);
 
-        // 3) Insertar items
-        $now = now();
-        $insert = $rows->map(function ($r) use ($codigoBackend, $now) {
-            return [
-                'codigo'     => $codigoBackend,
-                'cod_odoo'   => (int)($r['cod_odoo'] ?? 0),
-                'activo'     => (string)($r['activo'] ?? ''),
-                'unidad'     => $r['unidad'] ?? null,
-                'masa_mes'   => isset($r['masa_mes']) ? (float)$r['masa_mes'] : null,
-                'cantidad'   => isset($r['cantidad']) ? (float)$r['cantidad'] : null,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
-        })->all();
+        $userId = Auth::id();
+        if (!$userId) abort(401);
 
-        if (!empty($insert)) {
-            FormulaItem::insert($insert);
+        $codigoBackend = $this->buildCodFormula();
+
+        $capsulaReq = $request->input('capsula', 'auto');
+        if (!in_array($capsulaReq, ['auto','00','0'], true)) {
+            $capsulaReq = 'auto';
         }
 
-        // 4) Limpiar temporales
-        ActivoTemp::where('user_id', $userId)->delete();
+        $formulaId = DB::transaction(function () use ($request, $userId, $codigoBackend, $capsulaReq) {
 
-        return (int) $formula->id;
-    });
+            // 2) Calcular filas (incluye subtotal en activos)
+            $rows = $this->calcularFilasParaGuardar($userId, $capsulaReq);
 
-    // 5) Añadir automáticamente a "Fórmulas Establecidas" (sesión)
-    $sessionKey = \App\Http\Controllers\FormulasEstController::SESSION_KEY;
+            // 2.1) Total diario real (solo activos suman; los otros van en 0)
+            $totalGeneralDia = (float)$rows->sum('subtotal');
 
-    $items = $request->session()->get($sessionKey, []);
-    if (!collect($items)->firstWhere('id', $formulaId)) {
-        $items[] = ['id' => $formulaId, 'tipo' => null];
-        $request->session()->put($sessionKey, $items);
+            // 2.2) Regla de precio: (total*30)+4 y piso 12
+            $precio_medico = max(12, ($totalGeneralDia * 30) + 4);
+            $precio_medico = $this->roundUpToStep($precio_medico, 0.10); // <-- AQUI
+
+
+
+            // Mantengo tu esquema: público/distribuidor vienen del request
+            $precio_publico      = (float)$request->input('precio_publico', 0);
+            $precio_distribuidor = (float)$request->input('precio_distribuidor', 0);
+
+            // 1) Guardar cabecera (precio_medico YA blindado)
+            $formula = Formula::create([
+                'codigo'              => $codigoBackend,
+                'nombre_etiqueta'     => $request->input('nombre_etiqueta'),
+                'user_id'             => $userId,
+                'precio_medico'       => round($precio_medico, 2),
+                'precio_publico'      => round($precio_publico, 2),
+                'precio_distribuidor' => round($precio_distribuidor, 2),
+                'medico'              => $request->input('medico'),
+                'paciente'            => $request->input('paciente'),
+                'tomas_diarias'       => (float)$request->input('tomas_diarias', 0),
+            ]);
+
+            // 3) Insertar items
+            $now = now();
+            $insert = $rows->map(function ($r) use ($codigoBackend, $now) {
+                return [
+                    'codigo'     => $codigoBackend,
+                    'cod_odoo'   => (int)($r['cod_odoo'] ?? 0),
+                    'activo'     => (string)($r['activo'] ?? ''),
+                    'unidad'     => $r['unidad'] ?? null,
+                    'masa_mes'   => isset($r['masa_mes']) ? (float)$r['masa_mes'] : null,
+                    'cantidad'   => isset($r['cantidad']) ? (float)$r['cantidad'] : null,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            })->all();
+
+            if (!empty($insert)) {
+                FormulaItem::insert($insert);
+            }
+
+            // 4) Limpiar temporales
+            ActivoTemp::where('user_id', $userId)->delete();
+
+            return (int) $formula->id;
+        });
+
+        // 5) Añadir automáticamente a "Fórmulas Establecidas" (sesión)
+        $sessionKey = \App\Http\Controllers\FormulasEstController::SESSION_KEY;
+
+        $items = $request->session()->get($sessionKey, []);
+        if (!collect($items)->firstWhere('id', $formulaId)) {
+            $items[] = ['id' => $formulaId, 'tipo' => null];
+            $request->session()->put($sessionKey, $items);
+        }
+
+        return redirect()
+            ->route('fe.index')
+            ->with('ok', 'Fórmula guardada y añadida a Fórmulas Establecidas.');
     }
 
-    // 6) Redirigir a la vista de Fórmulas Establecidas
-    return redirect()
-        ->route('fe.index')
-        ->with('ok', 'Fórmula guardada y añadida a Fórmulas Establecidas.');
-}
 
 
-
+    /**
+     * Recomendación A aplicada aquí:
+     * - Devuelve filas con 'subtotal' para poder calcular el total real en backend
+     * - subtotal = costo diario (sin factor), consistente con tu resumen
+     */
     private function calcularFilasParaGuardar(int $userId, string $capsulaReq = 'auto'): \Illuminate\Support\Collection
-{
-    if (!in_array($capsulaReq, ['auto','00','0'], true)) {
-        $capsulaReq = 'auto';
-    }
+    {
+        if (!in_array($capsulaReq, ['auto','00','0'], true)) {
+            $capsulaReq = 'auto';
+        }
 
-    $items = ActivoTemp::where('user_id', $userId)->orderBy('id')->get();
+        $items = ActivoTemp::where('user_id', $userId)->orderBy('id')->get();
 
-    // Catálogo: temporales + filas fijas que se agregan
-    $codes = $items->pluck('cod_odoo')->map(fn($c)=>(int)$c)->all();
-    $codes = array_unique(array_merge($codes, [1101,1077,1078,1219,1220]));
+        $codes = $items->pluck('cod_odoo')->map(fn($c)=>(int)$c)->all();
+        $codes = array_unique(array_merge($codes, [1101,1077,1078,1219,1220]));
 
-    $catalogo = Activo::whereIn('cod_odoo', $codes)
-        ->get(['cod_odoo','nombre','valor_costo','factor','factor_venta','densidad'])
-        ->keyBy('cod_odoo');
+        $catalogo = Activo::whereIn('cod_odoo', $codes)
+            ->get(['cod_odoo','nombre','valor_costo','factor','factor_venta','densidad'])
+            ->keyBy('cod_odoo');
 
-    $CAP_VOL_00 = 0.95;   // ml por cápsula
-    $CAP_VOL_0  = 0.68;   // ml por cápsula
-    $D_EST      = 0.3228; // g/ml
+        $CAP_VOL_00 = 0.95;
+        $CAP_VOL_0  = 0.68;
+        $D_EST      = 0.3228;
 
-    $rows = collect();
+        $rows = collect();
 
-    $volDiaTotal_ml        = 0.0; // suma de vol diarios (activos)
-    $masaMesActivosTotal_g = 0.0; // g/mes (activos)
+        $volDiaTotal_ml        = 0.0; // activos
+        $masaMesActivosTotal_g = 0.0; // activos
 
-    // 1) Activos base (por día → masa/mes y volumen/día para la suma)
-    foreach ($items as $r) {
-        $mgDia = match ($r->unidad) {
-            'g'   => (float)$r->cantidad * 1000,
-            'mg'  => (float)$r->cantidad,
-            'mcg' => (float)$r->cantidad / 1000,
-            'UI'  => ((int)$r->cod_odoo === 1343)
-                ? ((float)$r->cantidad * 0.000025 / 1000)
-                : ((float)$r->cantidad * 0.00067),
-            default => 0.0,
-        };
+        foreach ($items as $r) {
+            $mgDia = match ($r->unidad) {
+                'g'   => (float)$r->cantidad * 1000,
+                'mg'  => (float)$r->cantidad,
+                'mcg' => (float)$r->cantidad / 1000,
+                'UI'  => ((int)$r->cod_odoo === 1343)
+                    ? ((float)$r->cantidad * 0.000025 / 1000)
+                    : ((float)$r->cantidad * 0.00067),
+                default => 0.0,
+            };
 
-        $a        = $catalogo->get((int)$r->cod_odoo);
-        $factor   = (float)($a->factor   ?? 1.0);
-        $densidad = (float)($a->densidad ?? 0.0); // g/ml
+            $a            = $catalogo->get((int)$r->cod_odoo);
+            $factor       = (float)($a->factor       ?? 1.0);
+            $densidad     = (float)($a->densidad     ?? 0.0);
+            $valor_costo  = (float)($a->valor_costo  ?? 0.0); // $/mg
+            $factor_venta = (float)($a->factor_venta ?? 1.0);
 
-        // CON factor
-        $mgDiaTotal = $mgDia * $factor;
-        $gDiaTotal  = $mgDiaTotal / 1000.0;          // g/día CON factor
-        $gMesTotal  = $gDiaTotal * 30.0;             // g/mes  CON factor
-        $volMlDia   = ($densidad > 0) ? ($gDiaTotal / $densidad) : 0.0;
+            // CON factor para pesaje/volumen
+            $mgDiaTotal = $mgDia * $factor;
+            $gDiaTotal  = $mgDiaTotal / 1000.0;
+            $gMesTotal  = $gDiaTotal * 30.0;
+            $volMlDia   = ($densidad > 0) ? ($gDiaTotal / $densidad) : 0.0;
 
-        $volDiaTotal_ml        += $volMlDia;
-        $masaMesActivosTotal_g += $gMesTotal;
+            $volDiaTotal_ml        += $volMlDia;
+            $masaMesActivosTotal_g += $gMesTotal;
+
+            // >>> subtotal diario SIN factor (igual que resumen cápsulas) <<<
+            $subtotal = round($mgDia * $valor_costo * $factor_venta, 6);
+
+            $rows->push([
+                'cod_odoo'          => (int)$r->cod_odoo,
+                'activo'            => (string)$r->activo,
+                'unidad'            => (string)$r->unidad,
+                'cantidad'          => (float)$r->cantidad, // por día (entrada)
+                'masa_mes'          => $gMesTotal,          // g/mes (CON factor)
+                'cant_total_pesaje' => $gDiaTotal,          // g/día (CON factor)
+                'vol_ml'            => $volMlDia,           // ml/día
+                'subtotal'          => $subtotal,           // $/día (SIN factor)
+            ]);
+        }
+
+        // Cálculo por volumen de cápsulas y estearato (+9.5%)
+        $capsDia_00 = (int)ceil($volDiaTotal_ml / $CAP_VOL_00);
+        $capsDia_0  = (int)ceil($volDiaTotal_ml / $CAP_VOL_0);
+
+        $capsMes_00 = $capsDia_00 * 30;
+        $capsMes_0  = $capsDia_0  * 30;
+
+        $capVolMes_00     = $capsDia_00 * $CAP_VOL_00 * 30.0;
+        $capVolMes_0      = $capsDia_0  * $CAP_VOL_0  * 30.0;
+        $volNecesarioMes  = $volDiaTotal_ml * 30.0;
+
+        $volFalt_00 = max(0.0, $capVolMes_00 - $volNecesarioMes);
+        $volFalt_0  = max(0.0, $capVolMes_0  - $volNecesarioMes);
+
+        $esteratoBase_gMes_00 = $volFalt_00 * $D_EST;
+        $esteratoBase_gMes_0  = $volFalt_0  * $D_EST;
+
+        $bonus95_g = $masaMesActivosTotal_g * 0.095;
+
+        $esterato_gMes_00 = $esteratoBase_gMes_00 + $bonus95_g;
+        $esterato_gMes_0  = $esteratoBase_gMes_0  + $bonus95_g;
+
+        $autoElegida  = ($esterato_gMes_00 <= $esterato_gMes_0) ? '00' : '0';
+        $finalElegida = ($capsulaReq === 'auto') ? $autoElegida : $capsulaReq;
+
+        if ($finalElegida === '00') {
+            $capsulaElegida   = '00';
+            $totalCapsElegida = $capsMes_00;
+            $esteratoFinal_g  = $esterato_gMes_00;
+            $capsCod          = 1078;
+        } else {
+            $capsulaElegida   = '0';
+            $totalCapsElegida = $capsMes_0;
+            $esteratoFinal_g  = $esterato_gMes_0;
+            $capsCod          = 1077;
+        }
+
+        // Estearato (subtotal = 0)
+        $rows->push([
+            'cod_odoo'          => 1101,
+            'activo'            => $catalogo->get(1101)->nombre ?? 'ESTEARATO DE MAGNESIO',
+            'unidad'            => 'mg',
+            'cantidad'          => (float)($esteratoFinal_g * 1000.0), // mg/mes
+            'masa_mes'          => (float)$esteratoFinal_g,            // g/mes
+            'cant_total_pesaje' => (float)($esteratoFinal_g / 30.0),
+            'vol_ml'            => (float)($esteratoFinal_g / $D_EST / 30.0),
+            'subtotal'          => 0.0,
+        ]);
+
+        // Cápsulas (subtotal = 0)
+        $rows->push([
+            'cod_odoo'          => $capsCod,
+            'activo'            => $catalogo->get($capsCod)->nombre ?? ('CAPSULA '.$capsulaElegida),
+            'unidad'            => 'und',
+            'cantidad'          => (float)$totalCapsElegida,
+            'masa_mes'          => $totalCapsElegida,
+            'cant_total_pesaje' => $totalCapsElegida,
+            'vol_ml'            => null,
+            'subtotal'          => 0.0,
+        ]);
+
+        // Pastillero (subtotal = 0)
+        if ($capsulaElegida === '00') { $capSmall = 30; $capLarge = 90; }
+        else                          { $capSmall = 60; $capLarge = 150; }
+
+        $need = (int)$totalCapsElegida;
+        if    ($need <= $capSmall) { $pastCod = 1219; $pastCount = 1; }
+        elseif($need <= $capLarge) { $pastCod = 1219; $pastCount = 1; }
+        else                       { $pastCod = 1219; $pastCount = (int)ceil($need / $capLarge); }
 
         $rows->push([
-            'cod_odoo'          => (int)$r->cod_odoo,
-            'activo'            => (string)$r->activo,
-            'unidad'            => (string)$r->unidad,
-            'cantidad'          => (float)$r->cantidad, // por día (tal como lo ingresan)
-            'masa_mes'          => $gMesTotal,          // g/mes CON factor
-            'cant_total_pesaje' => $gDiaTotal,          // g/día CON factor
-            'vol_ml'            => $volMlDia,           // ml/día
+            'cod_odoo'          => $pastCod,
+            'activo'            => $catalogo->get($pastCod)->nombre ?? 'PASTILLERO',
+            'unidad'            => 'und',
+            'cantidad'          => (float)$pastCount,
+            'masa_mes'          => $pastCount,
+            'cant_total_pesaje' => $pastCount,
+            'vol_ml'            => null,
+            'subtotal'          => 0.0,
         ]);
+
+        return $rows;
     }
 
-    // 2) Cálculo por volumen de cápsulas y estearato (+9.5%)
-    $capsDia_00 = (int)ceil($volDiaTotal_ml / $CAP_VOL_00);
-    $capsDia_0  = (int)ceil($volDiaTotal_ml / $CAP_VOL_0);
 
-    $capsMes_00 = $capsDia_00 * 30;
-    $capsMes_0  = $capsDia_0  * 30;
-
-    $capVolMes_00     = $capsDia_00 * $CAP_VOL_00 * 30.0; // ml/mes
-    $capVolMes_0      = $capsDia_0  * $CAP_VOL_0  * 30.0; // ml/mes
-    $volNecesarioMes  = $volDiaTotal_ml * 30.0;           // ml/mes
-
-    $volFalt_00 = max(0.0, $capVolMes_00 - $volNecesarioMes);
-    $volFalt_0  = max(0.0, $capVolMes_0  - $volNecesarioMes);
-
-    $esteratoBase_gMes_00 = $volFalt_00 * $D_EST;
-    $esteratoBase_gMes_0  = $volFalt_0  * $D_EST;
-
-    $bonus95_g = $masaMesActivosTotal_g * 0.095;
-
-    $esterato_gMes_00 = $esteratoBase_gMes_00 + $bonus95_g;
-    $esterato_gMes_0  = $esteratoBase_gMes_0  + $bonus95_g;
-
-    // Selección final respetando override
-    $autoElegida  = ($esterato_gMes_00 <= $esterato_gMes_0) ? '00' : '0';
-    $finalElegida = ($capsulaReq === 'auto') ? $autoElegida : $capsulaReq;
-
-    if ($finalElegida === '00') {
-        $capsulaElegida   = '00';
-        $totalCapsElegida = $capsMes_00;
-        $esteratoFinal_g  = $esterato_gMes_00;
-        $capsCod          = 1078;
-    } else {
-        $capsulaElegida   = '0';
-        $totalCapsElegida = $capsMes_0;
-        $esteratoFinal_g  = $esterato_gMes_0;
-        $capsCod          = 1077;
-    }
-
-    // 2.a) Estearato (masa_mes en g; cantidad en mg/mes)
-    $rows->push([
-        'cod_odoo'          => 1101,
-        'activo'            => $catalogo->get(1101)->nombre ?? 'ESTEARATO DE MAGNESIO',
-        'unidad'            => 'mg',
-        'cantidad'          => (float)($esteratoFinal_g * 1000.0), // mg/mes
-        'masa_mes'          => (float)$esteratoFinal_g,            // g/mes
-        'cant_total_pesaje' => (float)($esteratoFinal_g / 30.0),   // g/día
-        'vol_ml'            => (float)($esteratoFinal_g / $D_EST / 30.0), // ml/día aprox
-    ]);
-
-    // 2.b) Cápsulas (unidades)
-    $rows->push([
-        'cod_odoo'          => $capsCod,
-        'activo'            => $catalogo->get($capsCod)->nombre ?? ('CAPSULA '.$capsulaElegida),
-        'unidad'            => 'und',
-        'cantidad'          => (float)$totalCapsElegida,
-        'masa_mes'          => $totalCapsElegida,
-        'cant_total_pesaje' => $totalCapsElegida,
-        'vol_ml'            => null,
-    ]);
-
-    // 2.c) Pastillero
-    if ($capsulaElegida === '00') { $capSmall = 30; $capLarge = 90; }
-    else                          { $capSmall = 60; $capLarge = 150; }
-
-    $need = (int)$totalCapsElegida;
-    if    ($need <= $capSmall)     { $pastCod = 1219; $pastCount = 1; }
-    elseif($need <= $capLarge)     { $pastCod = 1219; $pastCount = 1; }
-    else                           { $pastCod = 1219; $pastCount = (int)ceil($need / $capLarge); }
-
-    $rows->push([
-        'cod_odoo'          => $pastCod,
-        'activo'            => $catalogo->get($pastCod)->nombre ?? 'PASTILLERO',
-        'unidad'            => 'und',
-        'cantidad'          => (float)$pastCount,
-        'masa_mes'          => $pastCount,
-        'cant_total_pesaje' => $pastCount,
-        'vol_ml'            => null,
-    ]);
-
-    return $rows;
-}
-
-
-
+    // =================== Guardar SOBRES (blindado backend con la misma regla) ===================
 
     public function guardarSobres(Request $request)
     {
@@ -840,7 +881,6 @@ class FormulaController extends Controller
             'cod_formula'           => ['required','string','max:30'],
             'nombre_etiqueta'       => ['nullable','string','max:150'],
             'medico'                => ['nullable','string','max:120'],
-            // 'paciente'            => ['nullable','string','max:120'],
             'precio_medico'         => ['nullable','numeric'],
             'precio_publico'        => ['nullable','numeric'],
             'precio_distribuidor'   => ['nullable','numeric'],
@@ -850,16 +890,60 @@ class FormulaController extends Controller
         $userId = Auth::id();
         if (!$userId) abort(401);
 
-        // Mantienes tu lógica: usar el código que viene del resumen
         $codigoBackend = $request->input('cod_formula');
 
         $formulaId = DB::transaction(function () use ($request, $userId, $codigoBackend) {
 
-            // 1) Cabecera
-            $precio_medico       = max(10, (float)$request->input('precio_medico', 0));
+            // Recalcular precio en backend (recomendación A aplicada a sobres)
+            $temp = ActivoTemp::where('user_id', $userId)->orderBy('id')->get();
+
+            // códigos a consultar (temp + fijos)
+            $codes = $temp->pluck('cod_odoo')->map(fn($c)=>(int)$c)->all();
+            $codes = array_unique(array_merge($codes, [70256, 9585])); // CLIGHT + SUCRALOSA
+
+            $catalogo = Activo::whereIn('cod_odoo', $codes)
+                ->get(['cod_odoo','valor_costo','factor_venta'])
+                ->keyBy('cod_odoo');
+
+            $calcSubtotal = function (int $cod, float $mg_dia) use ($catalogo): float {
+                $a = $catalogo->get($cod);
+                $valor_costo  = (float)($a->valor_costo  ?? 0.0);
+                $factor_venta = (float)($a->factor_venta ?? 1.0);
+                return round($mg_dia * $valor_costo * $factor_venta, 6); // $/día
+            };
+
+            $totalGeneralDia = 0.0;
+
+            // Fijos mg (igual que resumen sobres)
+            $totalGeneralDia += $calcSubtotal(70256, 1500/30);
+            $totalGeneralDia += $calcSubtotal(9585,  100/30);
+
+            // Variables por sobre (por día)
+            foreach ($temp as $t) {
+                $mg_dia = match ($t->unidad) {
+                    'g'   => (float)$t->cantidad * 1000,
+                    'mg'  => (float)$t->cantidad,
+                    'mcg' => (float)$t->cantidad / 1000,
+                    'UI'  => ((int)$t->cod_odoo === 1343)
+                        ? ((float)$t->cantidad * 0.000025 / 1000)
+                        : ((float)$t->cantidad * 0.00067),
+                    default => 0.0,
+                };
+
+                $totalGeneralDia += $calcSubtotal((int)$t->cod_odoo, (float)$mg_dia);
+            }
+
+            // Regla: (total*30)+4 con piso 12
+            $precio_medico = max(12, ($totalGeneralDia * 30) + 4);
+            $precio_medico = $this->roundUpToStep($precio_medico, 0.10); // <-- AQUI
+
+
+
+            // Mantengo tu esquema: público/distribuidor del request
             $precio_publico      = (float)$request->input('precio_publico', 0);
             $precio_distribuidor = (float)$request->input('precio_distribuidor', 0);
 
+            // 1) Cabecera
             $formula = Formula::create([
                 'codigo'              => $codigoBackend,
                 'nombre_etiqueta'     => $request->input('nombre_etiqueta'),
@@ -872,7 +956,7 @@ class FormulaController extends Controller
                 'tomas_diarias'       => (float)$request->input('tomas_diarias', 1) ?: 1,
             ]);
 
-            // 2) Ítems: fijos + temporales (calculando masa_mes)
+            // 2) Ítems (tu misma lógica)
             $rows = collect([
                 ['cod_odoo' => 70277, 'activo' => 'CAJA',       'cantidad' => 1,    'unidad' => 'und', 'masa_mes' => 1],
                 ['cod_odoo' => 70299, 'activo' => 'SOBRES',     'cantidad' => 30,   'unidad' => 'und', 'masa_mes' => 30],
@@ -880,7 +964,6 @@ class FormulaController extends Controller
                 ['cod_odoo' =>  9585, 'activo' => 'SUCARALOSA', 'cantidad' => 100,  'unidad' => 'mg',  'masa_mes' => 100/1000],
             ]);
 
-            $temp = ActivoTemp::where('user_id', $userId)->orderBy('id')->get();
             foreach ($temp as $t) {
                 $mg_dia = 0.0;
                 switch ($t->unidad) {
@@ -937,13 +1020,10 @@ class FormulaController extends Controller
             $request->session()->put($sessionKey, $items);
         }
 
-        // 6) Redirigir a FE
         return redirect()
             ->route('fe.index')
             ->with('ok', 'Fórmula en sobres guardada y añadida a Fórmulas Establecidas.');
     }
-
-
 
     public function recientes(Request $request)
     {
