@@ -118,6 +118,16 @@ class FormulaController extends Controller
             'warnings' => $warnings,
         ]);
     }
+    
+    
+    private function minMasaMes(float $value): float
+    {
+        // Solo corrige valores positivos muy pequeños
+        if ($value > 0 && $value < 0.001) {
+            return 0.001;
+        }
+        return $value;
+    }
 
 
 
@@ -325,9 +335,9 @@ class FormulaController extends Controller
                     'g'   => (float)$r->cantidad * 1000,
                     'mg'  => (float)$r->cantidad,
                     'mcg' => (float)$r->cantidad / 1000,
-                    'UI'  => ($r->cod_odoo == 1343)
-                            ? ((float)$r->cantidad * 0.000025 / 1000)
-                            : ((float)$r->cantidad * 0.00067),
+                    'UI'  => ($r->cod_odoo == 2730)
+                            ? ((float)$r->cantidad * 0.000025)
+                            : ((float)$r->cantidad * 0.67),
                     default => 0.0,
                 };
                 [$vc,$fv,$cant,$sub] = $calcSubtotal((int)$r->cod_odoo, $mg_dia);
@@ -407,9 +417,9 @@ class FormulaController extends Controller
                 'g'   => (float)$r->cantidad * 1000,
                 'mg'  => (float)$r->cantidad,
                 'mcg' => (float)$r->cantidad / 1000,
-                'UI'  => ((int)$r->cod_odoo === 1343)
-                            ? ((float)$r->cantidad * 0.000025 / 1000)
-                            : ((float)$r->cantidad * 0.00067),
+                'UI'  => ((int)$r->cod_odoo === 2730)
+                            ? ((float)$r->cantidad * 0.000025)
+                            : ((float)$r->cantidad * 0.67),
                 default => 0.0,
             };
 
@@ -747,9 +757,9 @@ class FormulaController extends Controller
                 'g'   => (float)$r->cantidad * 1000,
                 'mg'  => (float)$r->cantidad,
                 'mcg' => (float)$r->cantidad / 1000,
-                'UI'  => ((int)$r->cod_odoo === 1343)
-                    ? ((float)$r->cantidad * 0.000025 / 1000)
-                    : ((float)$r->cantidad * 0.00067),
+                'UI'  => ((int)$r->cod_odoo === 2730)
+                    ? ((float)$r->cantidad * 0.000025)
+                    : ((float)$r->cantidad * 0.67),
                 default => 0.0,
             };
 
@@ -762,7 +772,7 @@ class FormulaController extends Controller
             // CON factor para pesaje/volumen
             $mgDiaTotal = $mgDia * $factor;
             $gDiaTotal  = $mgDiaTotal / 1000.0;
-            $gMesTotal  = $gDiaTotal * 30.0;
+            $gMesTotal = $this->minMasaMes($gDiaTotal * 30.0);
             $volMlDia   = ($densidad > 0) ? ($gDiaTotal / $densidad) : 0.0;
 
             $volDiaTotal_ml        += $volMlDia;
@@ -924,9 +934,9 @@ class FormulaController extends Controller
                     'g'   => (float)$t->cantidad * 1000,
                     'mg'  => (float)$t->cantidad,
                     'mcg' => (float)$t->cantidad / 1000,
-                    'UI'  => ((int)$t->cod_odoo === 1343)
-                        ? ((float)$t->cantidad * 0.000025 / 1000)
-                        : ((float)$t->cantidad * 0.00067),
+                    'UI'  => ((int)$t->cod_odoo === 2730)
+                        ? ((float)$t->cantidad * 0.000025)
+                        : ((float)$t->cantidad * 0.67),
                     default => 0.0,
                 };
 
@@ -971,13 +981,13 @@ class FormulaController extends Controller
                     case 'mg':  $mg_dia = (float)$t->cantidad; break;
                     case 'mcg': $mg_dia = (float)$t->cantidad / 1000; break;
                     case 'UI':
-                        $mg_dia = ((int)$t->cod_odoo === 1343)
-                            ? ((float)$t->cantidad * 0.000025 / 1000)
-                            : ((float)$t->cantidad * 0.00067);
+                        $mg_dia = ((int)$t->cod_odoo === 2730)
+                            ? ((float)$t->cantidad * 0.000025)
+                            : ((float)$t->cantidad * 0.67);
                         break;
                 }
 
-                $masa_mes = ($mg_dia * 30) / 1000.0; // g/mes
+                $masa_mes = $this->minMasaMes(($mg_dia * 30) / 1000.0);
 
                 $rows->push([
                     'cod_odoo' => (int)$t->cod_odoo,

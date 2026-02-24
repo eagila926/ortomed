@@ -1,5 +1,4 @@
 @php
-   
     $prefill = session('etiqueta_preview', []);
     $soPrefill = $prefill['so'] ?? null;
     $medicoPrefill = $prefill['medico'] ?? null;
@@ -15,7 +14,7 @@
         return trim($first.' '.$last);
     }
     $medicoCorto = nombreCorto($medicoPrefill);
-    
+
     // ===== Helpers de vista =====
     function abreviarNombreActivoView($nombre) {
         $nombre = preg_replace('/\s*\(.*?\)\s*/', '', (string)$nombre);
@@ -27,10 +26,22 @@
         return $nombre;
     }
 
-    // Excluir auxiliares (cápsulas, estearato, pastilleros, sobres, etc.)
-    $excluir = [70274,70272,70275,70273,1101,1078,1077,1219,70276,70271,71497];
-    $items  = $items ?? $formula->items->filter(fn($it) => !in_array((int)$it->cod_odoo, $excluir))->values();
+    // ===== Códigos =====
+    // Pastilleros existentes (NO deben mostrarse en composición)
+    $codPastilleros = [70274, 70272, 70276, 70275, 70273, 70271, 71497, 1219];
 
+    // Excluir auxiliares (cápsulas, estearato, pastilleros, sobres, etc.)
+    $excluir = array_merge($codPastilleros, [1101, 1078, 1077]);
+
+    // IMPORTANTÍSIMO:
+    // El número de pastilleros se recupera DESDE LA TABLA (relación items()) sumando "cantidad"
+    // Ej: cod_odoo=1219 cantidad=2 => 2 pastilleros
+    $numPastilleros = (float) $formula->items()
+        ->whereIn('cod_odoo', $codPastilleros)
+        ->sum('cantidad');
+
+    // Items mostrados en composición (sin auxiliares)
+    $items  = $items ?? $formula->items->filter(fn($it) => !in_array((int)$it->cod_odoo, $excluir))->values();
     $totalActivos = $items->count();
 
     // Espaciado extra
@@ -41,7 +52,7 @@
     } else {
         $espaciadoExtra = '';
     }
- 
+
     // Columnas
     $columnas = 2;
     if ($totalActivos >= 16 && $totalActivos <= 30) $columnas = 3;
@@ -53,7 +64,18 @@
     // Pie (valores por defecto que luego el usuario puede editar)
     $tomas   = (int) ($formula->tomas_diarias ?? 3);
     $dias    = 30;
-    $contieneCaps = $tomas * $dias;
+
+    // TOTAL cápsulas base (antes de dividir)
+    $contieneCapsTotal = $tomas * $dias;
+
+    // Cálculo final a imprimir en "CONTIENE"
+    // - Si hay 0 o 1 pastillero => NO dividir
+    // - Si hay 2+ pastilleros => dividir "cápsulas por pastillero"
+    if ($numPastilleros > 1) {
+        $contieneCapsEtiqueta = (int) ceil($contieneCapsTotal / $numPastilleros);
+    } else {
+        $contieneCapsEtiqueta = (int) $contieneCapsTotal;
+    }
 
     // Título dinámico
     $nombreEtiqueta = (string) ($formula->nombre_etiqueta ?? '');
@@ -110,76 +132,106 @@
   .sugs-item:hover { background:#f5f7fb; }
 </style>
 
-<dialog id="dlg-recetas" style="border:none;border-radius:12px;padding:0;max-width:720px;width:95%">
-  <form method="POST" action="{{ route('recetas.store') }}" id="frm-recetas" style="padding:20px 24px" novalidate>
-    @csrf
-    <h3 style="margin:0 0 12px">Datos para guardar recetas</h3>
+@php
+  $canRecetas = auth()->check() && auth()->user()->hasRole(['Admin','Laboratorio']);
+@endphp
 
-    <!-- Número de etiquetas (controla si paciente es editable) -->
-    <div class="form-row">
-      <label><strong>Número de etiquetas a imprimir</strong></label><br>
-      <input type="number" name="num_etiquetas" id="num_etiquetas" value="1" min="1" max="200"
-             style="width:140px" required>
-    </div>
+@if($canRecetas)
+  <dialog id="dlg-recetas">
+    <form method="POST" action="{{ route('recetas.store') }}" id="frm-recetas" novalidate>
+      @csrf
 
-    <!-- Código de fórmula (no editable) -->
-    <div class="form-row">
-      <label>Código de fórmula</label><br>
-      <input type="text" name="codigo_formula" value="{{ $formula->codigo }}" readonly
-             style="width:260px;background:#f6f6f6">
-    </div>
-
-    <!-- SO (solo números) -->
-    <div class="form-row">
-      <label>SO</label><br>
-      <input type="text" name="so" id="so" inputmode="numeric" pattern="\d+" maxlength="50"
-             placeholder="Solo números" required style="width:260px">
-    </div>
-
-    <!-- Fecha (hoy por defecto) -->
-    <div class="form-row">
-      <label>Fecha</label><br>
-      <input type="date" name="fecha" value="{{ now()->toDateString() }}" required>
-    </div>
-
-    <!-- Médico: buscar por nombre y guardar cédula -->
-    <div class="form-row">
-      <label>Médico (buscar por nombre/apellido)</label><br>
-      <div style="position:relative; width:360px">
-        <input type="text" id="medico_search" placeholder="Ej. 'María López'" autocomplete="off" style="width:100%">
-        <div id="medico_sugs"></div>
+      <div class="dlg-recetas__header">
+        <div>
+          <h3 class="dlg-recetas__title">Datos para guardar recetas</h3>
+          <p class="dlg-recetas__subtitle">
+            Completa la información para generar las etiquetas de esta fórmula.
+          </p>
+        </div>
+        <span class="dlg-recetas__badge">
+          {{ $formula->codigo ?? 'FÓRMULA' }}
+        </span>
       </div>
-      <input type="hidden" name="cedula_medico" id="cedula_medico" required>
-      <small id="medico_sel" style="display:block;margin-top:4px;color:#555"></small>
-      <!--nombreOculto- -->
-      <input type="hidden" name="medico_nombre" id="medico_nombre">
 
-    </div>
+      <div class="dlg-recetas__body">
+        <div class="dlg-recetas__grid">
 
-    <!-- Paciente (solo editable cuando num_etiquetas = 1) -->
-    <div id="grp_paciente" class="form-row">
-      <label>Paciente (opcional si solo 1 etiqueta)</label><br>
-      <input type="text" name="paciente" id="paciente" maxlength="50" style="width:360px"
-             placeholder="Dejar vacío para nombre aleatorio">
-    </div>
+          <div class="form-row">
+            <label for="num_etiquetas">Número de etiquetas a imprimir</label>
+            <input type="number" name="num_etiquetas" id="num_etiquetas"
+                   class="dlg-recetas__input"
+                   value="1" min="1" max="200" required>
+            <small>Si eliges más de 1, el paciente se llenará de forma automática.</small>
+          </div>
 
-    <!-- para regresar a esta misma vista -->
-    <input type="hidden" name="redirect_to" value="{{ url()->current() }}">
+          <div class="form-row">
+            <label>Código de fórmula</label>
+            <input type="text" name="codigo_formula"
+                   class="dlg-recetas__input"
+                   value="{{ $formula->codigo }}" readonly>
+          </div>
 
-    <div style="display:flex;gap:12px;justify-content:flex-end;margin-top:10px">
-      <button type="button" id="btn-cancel" class="btn-outline">Cancelar</button>
-      <button type="submit" id="btn-save" class="btn-primary" disabled>Guardar recetas y continuar</button>
-    </div>
-  </form>
-</dialog>
+          <div class="form-row">
+            <label for="so">SO</label>
+            <input type="text" name="so" id="so"
+                   class="dlg-recetas__input"
+                   inputmode="numeric" pattern="\d+" maxlength="50"
+                   placeholder="Solo números" required>
+          </div>
 
-<script>
-  // ---------- Apertura del modal ----------
+          <div class="form-row">
+            <label for="fecha">Fecha</label>
+            <input type="date" name="fecha" id="fecha"
+                   class="dlg-recetas__input-date"
+                   value="{{ now()->toDateString() }}" required>
+          </div>
+
+          <div class="form-row" style="grid-column:1 / -1;">
+            <label>Médico (buscar por nombre/apellido)</label>
+            <div style="position:relative; max-width:420px;">
+              <input type="text" id="medico_search"
+                     class="dlg-recetas__input"
+                     placeholder="Ej. 'María López'"
+                     autocomplete="off">
+              <div id="medico_sugs"></div>
+            </div>
+            <input type="hidden" name="cedula_medico" id="cedula_medico" required>
+            <input type="hidden" name="medico_nombre" id="medico_nombre">
+            <small id="medico_sel" style="display:block;margin-top:4px;"></small>
+          </div>
+
+          <div id="grp_paciente" class="form-row" style="grid-column:1 / -1; max-width:420px;">
+            <label for="paciente">Paciente (opcional si solo 1 etiqueta)</label>
+            <input type="text" name="paciente" id="paciente"
+                   class="dlg-recetas__input"
+                   maxlength="50"
+                   placeholder="Dejar vacío para nombre aleatorio">
+          </div>
+
+        </div>
+
+        <input type="hidden" name="redirect_to" value="{{ url()->current() }}">
+      </div>
+
+      <div class="dlg-recetas__footer">
+        <button type="button" id="btn-cancel" class="btn-outline">Cancelar</button>
+        <button type="submit" id="btn-save" class="btn-primary" disabled>
+          Guardar recetas y continuar
+        </button>
+      </div>
+
+    </form>
+  </dialog>
+
+  <script>
+    // ---------- Apertura del modal ----------
     const mustOpen = {{ session()->has('recetas_guardadas') ? 'false' : 'true' }};
     const dlg = document.getElementById('dlg-recetas');
+
     if (mustOpen && dlg && !dlg.open) dlg.showModal();
 
     document.getElementById('btn-cancel')?.addEventListener('click', () => dlg.close());
+
     // ---------- Referencias ----------
     const form   = document.getElementById('frm-recetas');
     const btnSave= document.getElementById('btn-save');
@@ -192,32 +244,32 @@
     const selText= document.getElementById('medico_sel');
     const sugBox = document.getElementById('medico_sugs');
 
-    // ---------- SO: solo dígitos + mensaje claro ----------
+    // ---------- SO: solo dígitos ----------
     so?.addEventListener('input', (e) => {
-        e.target.value = (e.target.value || '').replace(/[^0-9]/g, '');
-        e.target.setCustomValidity('');
-        updateSaveEnabled();
+      e.target.value = (e.target.value || '').replace(/[^0-9]/g, '');
+      e.target.setCustomValidity('');
+      updateSaveEnabled();
     });
     so?.addEventListener('invalid', function() {
-        if (this.validity.patternMismatch) {
+      if (this.validity.patternMismatch) {
         this.setCustomValidity('SO solo acepta dígitos (0-9).');
-        }
+      }
     });
 
-    // ---------- Mostrar/ocultar "paciente" según num_etiquetas ----------
+    // ---------- Mostrar/ocultar paciente ----------
     function togglePaciente() {
-        const n = parseInt(numEt.value || '1', 10);
-        if (n > 1) {
+      const n = parseInt(numEt.value || '1', 10);
+      if (n > 1) {
         grpPac.style.opacity = '0.5';
         inpPac.value = '';
         inpPac.disabled = true;
         inpPac.placeholder = 'Se generarán nombres aleatorios';
-        } else {
+      } else {
         grpPac.style.opacity = '1';
         inpPac.disabled = false;
         inpPac.placeholder = 'Dejar vacío para nombre aleatorio';
-        }
-        updateSaveEnabled();
+      }
+      updateSaveEnabled();
     }
     numEt?.addEventListener('input', togglePaciente);
     togglePaciente();
@@ -226,98 +278,90 @@
     let sugPanel = null;
     function clearSugs(){ if (sugPanel){ sugPanel.remove(); sugPanel=null; } }
 
-    
-  async function buscarMedicos(q){
-    if (!q || q.length < 2) { clearSugs(); return; }
-    const url = "{{ route('medicos.buscar') }}" + "?q=" + encodeURIComponent(q);
+    async function buscarMedicos(q){
+      if (!q || q.length < 2) { clearSugs(); return; }
+      const url = "{{ route('medicos.buscar') }}" + "?q=" + encodeURIComponent(q);
 
-    let list = [];
-    try {
-      const resp = await fetch(url, {
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'Accept': 'application/json'
-        }
-      });
+      let list = [];
+      try {
+        const resp = await fetch(url, {
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+          }
+        });
 
-      if (!resp.ok) {
-        console.error('HTTP error', resp.status);
+        if (!resp.ok) { clearSugs(); return; }
+
+        const data = await resp.json();
+        list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
+      } catch (e) {
         clearSugs();
-        return; // evita forEach si hubo 500
+        return;
       }
 
-      const data = await resp.json();
-      // Asegura array:
-      list = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
-    } catch (e) {
-      console.error('Fetch/JSON error:', e);
       clearSugs();
-      return;
-    }
+      sugPanel = document.createElement('div');
+      sugPanel.className = 'sugs-panel';
 
-    clearSugs();
-    sugPanel = document.createElement('div');
-    sugPanel.className = 'sugs-panel';
+      if (!list.length) {
+        const empty = document.createElement('div');
+        empty.className = 'sugs-item empty';
+        empty.textContent = 'Sin resultados';
+        sugPanel.appendChild(empty);
+        sugBox.appendChild(sugPanel);
+        return;
+      }
 
-    if (!list.length) {
-      const empty = document.createElement('div');
-      empty.className = 'sugs-item';
-      empty.style.color = '#777';
-      empty.textContent = 'Sin resultados';
-      sugPanel.appendChild(empty);
-      sugBox.appendChild(sugPanel);
-      return;
-    }
-
-    list.forEach(item => {
-      const opt = document.createElement('div');
-      opt.className = 'sugs-item';
-      opt.textContent = item.label + ' — C.I. ' + item.cedula;
-      opt.addEventListener('click', () => {
-        inpMed.value = item.label;
-        cedulaHidden.value = item.cedula;
-        document.getElementById('medico_nombre').value = item.label; // <—
-        selText.textContent = 'Seleccionado: ' + item.label + ' (C.I. ' + item.cedula + ')';
-        clearSugs();
-        updateSaveEnabled();
+      list.forEach(item => {
+        const opt = document.createElement('div');
+        opt.className = 'sugs-item';
+        opt.textContent = item.label + ' — C.I. ' + item.cedula;
+        opt.addEventListener('click', () => {
+          inpMed.value = item.label;
+          cedulaHidden.value = item.cedula;
+          document.getElementById('medico_nombre').value = item.label;
+          selText.textContent = 'Seleccionado: ' + item.label + ' (C.I. ' + item.cedula + ')';
+          clearSugs();
+          updateSaveEnabled();
+        });
+        sugPanel.appendChild(opt);
       });
-      sugPanel.appendChild(opt);
-    });
 
-    sugBox.appendChild(sugPanel);
-  }
+      sugBox.appendChild(sugPanel);
+    }
 
     inpMed?.addEventListener('input', (e)=> {
-        cedulaHidden.value = '';
-        selText.textContent='';
-        buscarMedicos(e.target.value.trim());
-        updateSaveEnabled();
+      cedulaHidden.value = '';
+      selText.textContent = '';
+      buscarMedicos(e.target.value.trim());
+      updateSaveEnabled();
     });
 
     document.addEventListener('click', (e)=> {
-        if (!sugBox.contains(e.target) && e.target !== inpMed) clearSugs();
+      if (!sugBox.contains(e.target) && e.target !== inpMed) clearSugs();
     });
 
     // ---------- Habilitar/Deshabilitar botón Guardar ----------
     function updateSaveEnabled(){
-        const soOk = !!so.value && /^\d+$/.test(so.value);
-        const medOk = !!cedulaHidden.value;
-        const n = parseInt(numEt.value || '1', 10);
-        // Si n==1 paciente es opcional; si n>1 paciente se ignora
-        btnSave.disabled = !(soOk && medOk && n >= 1);
+      const soOk = !!so.value && /^\d+$/.test(so.value);
+      const medOk = !!cedulaHidden.value;
+      const n = parseInt(numEt.value || '1', 10);
+      btnSave.disabled = !(soOk && medOk && n >= 1);
     }
     updateSaveEnabled();
 
-    // ---------- Validación final en submit ----------
+    // ---------- Validación final ----------
     form.addEventListener('submit', (e) => {
-        if (!cedulaHidden.value) {
+      if (!cedulaHidden.value) {
         e.preventDefault();
         alert('Selecciona un médico de la lista.');
         inpMed.focus();
-        }
+      }
     });
-    </script>
-    <!-- ===== FIN MODAL ===== -->
+  </script>
+@endif
+<!-- ===== FIN MODAL ===== -->
 
 
 <div class="container">
@@ -362,16 +406,16 @@
         <div class="row" style="align-items:flex-start;">
             <div class="col">
                 <div>
-                  <strong>DR.(A):
+                  <strong>
                     <span class="editable" contenteditable="true">
-                      {{ $medicoCorto ?? ($formula->medico ?? '-') }}
+                      DR.(A):{{ $medicoCorto ?? ($formula->medico ?? '-') }}
                     </span>
                   </strong>
                 </div>
 
                 <div>
                     <strong>CONTIENE: </strong>
-                    <strong><span class="editable js-only-numbers" contenteditable="true">{{ $contieneCaps }}</span>
+                    <strong><span class="editable js-only-numbers" contenteditable="true">{{ $contieneCapsEtiqueta }}</span>
                      CÁPSULAS</strong>
                 </div>
 
@@ -390,6 +434,9 @@
                 </div>
             </div>
         </div>
+        <p class="fabri" style="font-size:20px; display:block; text-align:right; margin-right:-10px">
+                    Elaborado por: Escollanos
+            </p>
     </div>
 </div>
 

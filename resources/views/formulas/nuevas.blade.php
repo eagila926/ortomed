@@ -120,7 +120,6 @@
     $.post("{{ route('formulas.buscar') }}", { producto: valor }, function (data) {
       if (!data) { $('#resultados-activos').hide().empty(); return; }
       $('#resultados-activos').show().html(data);
-
       $('.suggest-element').off('click').on('click', function () {
         const cod    = $(this).data('cod_odoo');
         const nombre = $(this).text();

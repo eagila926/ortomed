@@ -155,6 +155,25 @@
             </a>
           </li>
         @endif
+        
+        @if($user && $user->hasRole(['Admin','Laboratorio']))
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {{ request()->routeIs('etiquetas_especiales.*') ? 'fw-semibold' : '' }}"
+               href="#" role="button" data-bs-toggle="dropdown">
+              <i class="bi bi-tags"></i> Etiquetas
+            </a>
+            <ul class="dropdown-menu">
+              <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.martinez') }}">Martínez-Biolosmed</a></li>
+              <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.julisa') }}">Dra. Julisa</a></li>
+              <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.balance') }}">Dra Viteri</a></li>
+              <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.mesalbuda') }}">Mesalbuda</a></li>
+              <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.editable') }}">Editable</a></li>
+            </ul>
+          </li>
+        @endif
+
+
+        
 
       </ul>
 

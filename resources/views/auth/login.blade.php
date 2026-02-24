@@ -151,7 +151,7 @@
           <h1>Bienvenido a Ortomed</h1>
           <p>Accede para gestionar fórmulas, activos y pedidos en un entorno seguro.</p>
         </div>
-        <div class="footer-note">© Escollanos Medicamentos Biológicos</div>
+        <div class="footer-note">© Escollanos Medicamentos Biológicos - 2026</div>
       </div>
 
       <!-- Lado derecho (formulario) -->

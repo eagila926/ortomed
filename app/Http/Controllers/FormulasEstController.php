@@ -22,36 +22,72 @@ class FormulasEstController extends Controller
     {
         $items = $request->session()->get(self::SESSION_KEY, []); // [['id'=>1,'tipo'=>null], ...]
         $ids   = array_column($items, 'id');
-
-        $formulas = $ids ? Formula::whereIn('id',$ids)
-            ->get(['id','codigo','nombre_etiqueta','precio_medico','precio_publico','precio_distribuidor']) : collect();
-
-        $rows = $formulas->map(function($f) use ($items){
-            $tipo = collect($items)->firstWhere('id',$f->id)['tipo'] ?? null;
+    
+        $formulas = $ids
+            ? Formula::whereIn('id', $ids)
+                ->orderByRaw("
+                    CASE
+                        WHEN codigo LIKE 'FOTHESCO%' THEN 0
+                        ELSE 1
+                    END
+                ")
+                ->orderBy('codigo') // orden dentro de cada grupo
+                ->get([
+                    'id',
+                    'codigo',
+                    'nombre_etiqueta',
+                    'precio_medico',
+                    'precio_publico',
+                    'precio_distribuidor'
+                ])
+            : collect();
+    
+        $rows = $formulas->map(function ($f) use ($items) {
+            $tipo = collect($items)->firstWhere('id', $f->id)['tipo'] ?? null;
+    
             return (object)[
-                'id'=>$f->id,'codigo'=>$f->codigo,'nombre_etiqueta'=>$f->nombre_etiqueta,
-                'precio_medico'=>(float)$f->precio_medico,
-                'precio_distribuidor'=>(float)$f->precio_distribuidor,
-                'precio_publico'=>(float)$f->precio_publico,
-                'tipo'=>$tipo
+                'id'                 => $f->id,
+                'codigo'             => $f->codigo,
+                'nombre_etiqueta'    => $f->nombre_etiqueta,
+                'precio_medico'      => (float) $f->precio_medico,
+                'precio_distribuidor'=> (float) $f->precio_distribuidor,
+                'precio_publico'     => (float) $f->precio_publico,
+                'tipo'               => $tipo,
             ];
         });
-
-        return view('formulas.establecidas', ['rows'=>$rows, 'tipos'=>self::TIPO_ETIQUETA]);
+    
+        return view('formulas.establecidas', [
+            'rows'  => $rows,
+            'tipos' => self::TIPO_ETIQUETA
+        ]);
     }
+
 
     public function buscar(Request $request)
     {
-        $q = trim((string)$request->query('q',''));
-        if ($q==='') return response()->json([]);
-        $data = Formula::where('codigo','like',"%{$q}%")
-            ->orWhere('nombre_etiqueta','like',"%{$q}%")
-            ->orderBy('codigo')->limit(12)
-            ->get(['id','codigo','nombre_etiqueta','precio_medico','precio_publico','precio_distribuidor'])
-            ->map(fn($f)=>[
-                'id'=>$f->id,
-                'display'=>$f->codigo.' — '.$f->nombre_etiqueta,
+        $q = trim((string) $request->query('q', ''));
+        if ($q === '') return response()->json([]);
+    
+        $data = Formula::query()
+            ->where(function ($qq) use ($q) {
+                $qq->where('codigo', 'like', "%{$q}%")
+                   ->orWhere('nombre_etiqueta', 'like', "%{$q}%");
+            })
+            // Prioriza códigos que EMPIECEN con FOTHESCO
+            ->orderByRaw("
+                CASE
+                    WHEN codigo LIKE 'FOTHESCO%' THEN 0
+                    ELSE 1
+                END
+            ")
+            ->orderBy('codigo')
+            ->limit(12)
+            ->get(['id', 'codigo', 'nombre_etiqueta', 'precio_medico', 'precio_publico', 'precio_distribuidor'])
+            ->map(fn ($f) => [
+                'id'      => $f->id,
+                'display' => $f->codigo . ' — ' . $f->nombre_etiqueta,
             ]);
+    
         return response()->json($data);
     }
 

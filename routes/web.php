@@ -10,12 +10,14 @@ use App\Http\Controllers\MedicoController;
 use App\Http\Controllers\RecetaController;
 use App\Http\Controllers\PedidoController;
 use App\Http\Controllers\PedidoFormulaController;
-use App\Http\Middleware\ProduccionAccess;
-use App\Http\Middleware\PedidosAccess;
-use App\Http\Middleware\RecetasAccess;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\ActivoController;
+
+use App\Http\Middleware\ProduccionAccess;
+use App\Http\Middleware\PedidosAccess;
+use App\Http\Middleware\RecetasAccess;
+use App\Http\Middleware\EtiquetasAccess;
 
 /*
 |--------------------------------------------------------------------------
@@ -36,15 +38,15 @@ Route::middleware('guest')->group(function () {
 // Comprobación de DomPDF
 Route::get('/dompdf-check', function () {
     return response()->json([
-        'pkg_dir_exists'       => is_dir(base_path('vendor/barryvdh/laravel-dompdf')),
-        'class_Facade'         => class_exists(\Barryvdh\DomPDF\Facade::class),
-        'class_Facade_Pdf'     => class_exists(\Barryvdh\DomPDF\Facade\Pdf::class),
-        'class_ServiceProvider'=> class_exists(\Barryvdh\DomPDF\ServiceProvider::class),
-        'bound_wrapper'        => app()->bound('dompdf.wrapper'),
+        'pkg_dir_exists'        => is_dir(base_path('vendor/barryvdh/laravel-dompdf')),
+        'class_Facade'          => class_exists(\Barryvdh\DomPDF\Facade::class),
+        'class_Facade_Pdf'      => class_exists(\Barryvdh\DomPDF\Facade\Pdf::class),
+        'class_ServiceProvider' => class_exists(\Barryvdh\DomPDF\ServiceProvider::class),
+        'bound_wrapper'         => app()->bound('dompdf.wrapper'),
     ]);
 });
 
-// Autocompletado de productos (pedidos) - se usa en el front sin necesidad de auth extra
+// Autocompletado de productos (pedidos)
 Route::get('/pedidos/productos/buscar', [PedidoController::class, 'buscarProductos'])
     ->name('pedidos.productos.buscar');
 
@@ -56,7 +58,6 @@ Route::get('/pedidos/formulas/buscar', [PedidoFormulaController::class, 'buscarF
 | Rutas protegidas (requieren login)
 |--------------------------------------------------------------------------
 */
-
 Route::middleware('auth')->group(function () {
 
     // Dashboard principal
@@ -65,13 +66,13 @@ Route::middleware('auth')->group(function () {
     /*
     |------------------------- Usuarios / Médicos -------------------------
     */
-    Route::get('/usuarios',              [UserController::class, 'index'])->name('usuarios.index');
-    Route::get('/usuarios/crear',        [UserController::class, 'create'])->name('usuarios.create');
-    Route::post('/usuarios',             [UserController::class, 'store'])->name('usuarios.store');
-    Route::get('/usuarios/{usuario}/editar', [UserController::class, 'edit'])->name('usuarios.edit');
-    Route::put('/usuarios/{usuario}',    [UserController::class,'update'])->name('usuarios.update');
+    Route::get('/usuarios',                   [UserController::class, 'index'])->name('usuarios.index');
+    Route::get('/usuarios/crear',             [UserController::class, 'create'])->name('usuarios.create');
+    Route::post('/usuarios',                  [UserController::class, 'store'])->name('usuarios.store');
+    Route::get('/usuarios/{usuario}/editar',  [UserController::class, 'edit'])->name('usuarios.edit');
+    Route::put('/usuarios/{usuario}',         [UserController::class,'update'])->name('usuarios.update');
 
-    Route::get('/buscar-medico', [FormulaController::class, 'buscarMedico'])->name('medicos.buscar');
+    Route::get('/buscar-medico',  [FormulaController::class, 'buscarMedico'])->name('medicos.buscar');
     Route::get('/medicos/buscar', [MedicoController::class, 'buscar'])->name('medicos.buscar');
 
     /*
@@ -108,19 +109,17 @@ Route::middleware('auth')->group(function () {
 
         // Formulas establecidas
         Route::prefix('formulas/establecidas')->name('fe.')->group(function () {
-            Route::get('/',            [FormulasEstController::class,'index'])->name('index');
-            Route::get('/buscar',      [FormulasEstController::class,'buscar'])->name('buscar');
-            Route::post('/add',        [FormulasEstController::class,'add'])->name('add');
-            Route::post('/update-tipo',[FormulasEstController::class,'updateTipo'])->name('update');
-            Route::delete('/{id}',     [FormulasEstController::class,'remove'])->name('remove');
-            Route::delete('/clear/all',[FormulasEstController::class,'clear'])->name('clear');
-            Route::get('/{id}/print',  [FormulasEstController::class,'print'])->name('print');
-            Route::get('/{id}/excel',  [FormulasEstController::class,'excel'])->name('excel');
+            Route::get('/',             [FormulasEstController::class,'index'])->name('index');
+            Route::get('/buscar',       [FormulasEstController::class,'buscar'])->name('buscar');
+            Route::post('/add',         [FormulasEstController::class,'add'])->name('add');
+            Route::post('/update-tipo', [FormulasEstController::class,'updateTipo'])->name('update');
+            Route::delete('/{id}',      [FormulasEstController::class,'remove'])->name('remove');
+            Route::delete('/clear/all', [FormulasEstController::class,'clear'])->name('clear');
 
-            // Lista de ítems por fórmula (vista)
+            Route::get('/{id}/print',   [FormulasEstController::class,'print'])->name('print');
+            Route::get('/{id}/excel',   [FormulasEstController::class,'excel'])->name('excel');
+
             Route::get('/{id}/items', [FormulasEstController::class,'items'])->name('items');
-
-            // Exportar ítems a CSV / Excel
             Route::get('/{id}/items/export', [FormulasEstController::class,'itemsExportXlsx'])->name('items.export');
         });
 
@@ -136,10 +135,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/recetas', [RecetaController::class, 'storeMultiple'])->name('recetas.store');
         Route::get('/recetas/{receta}/enviar-mail', [RecetaController::class, 'testEnviarMail'])->name('recetas.testMail');
 
-        // Listado de recetas (todas, con paginación)
         Route::get('/recetas', [RecetaController::class, 'index'])->name('recetas.index');
-
-        // Detalle de una receta
         Route::get('/recetas/{receta}', [RecetaController::class, 'show'])
             ->whereNumber('receta')
             ->name('recetas.show');
@@ -154,15 +150,15 @@ Route::middleware('auth')->group(function () {
     Route::prefix('pedidos')->name('pedidos.')
         ->middleware(PedidosAccess::class)
         ->group(function () {
+
             // ======= PRODUCTOS =======
             Route::get('/productos', [PedidoController::class, 'productos'])->name('productos');
             Route::post('/productos/agregar', [PedidoController::class, 'agregarProducto'])->name('productos.agregar');
 
-            // (Si ya no usas el índice, podrías eliminar esta)
             Route::delete('/productos/{index}', [PedidoController::class, 'eliminarProducto'])->name('productos.eliminar');
 
-            // Eliminar por id (esta es la que estás usando en la vista)
-            Route::delete('/pedidos/productos/{id}', [PedidoController::class, 'eliminarProducto'])->name('pedidos.productos.eliminar');
+            Route::delete('/pedidos/productos/{id}', [PedidoController::class, 'eliminarProducto'])
+                ->name('pedidos.productos.eliminar');
 
             Route::post('/finalizar', [PedidoController::class, 'finalizar'])->name('finalizar');
 
@@ -170,32 +166,40 @@ Route::middleware('auth')->group(function () {
 
             Route::get('/mis-pedidos', [PedidoController::class, 'misPedidos'])->name('mis');
 
-
             // ======= FÓRMULAS =======
-            // listado principal (carrito de fórmulas)
             Route::get('/formulas', [PedidoFormulaController::class, 'formulas'])->name('formulas');
-
-            // agregar al carrito
             Route::post('/formulas/agregar', [PedidoFormulaController::class, 'agregarFormula'])->name('formulas.agregar');
-
-            // eliminar ítem del carrito
             Route::delete('/formulas/{id}', [PedidoFormulaController::class, 'eliminarFormula'])->name('formulas.eliminar');
-
-            // finalizar pedido de fórmulas
             Route::post('/formulas/finalizar', [PedidoFormulaController::class, 'finalizarFormulas'])->name('formulas.finalizar');
-
-            // PDF de pedido de fórmulas
             Route::get('/formulas/{pedido}/pdf', [PedidoFormulaController::class, 'pdf'])->name('formulas.pdf');
-
-            // Mis pedidos de fórmulas
             Route::get('/mis-pedidos-formulas', [PedidoFormulaController::class, 'misPedidosFormulas'])->name('formulas.mis');
         });
 
-        Route::prefix('activos')->name('activos.')->middleware('activos')->group(function () {
-            Route::get('/', [ActivoController::class, 'index'])->name('index');
-            Route::get('/{activo}/editar', [ActivoController::class, 'edit'])->name('edit');
-            Route::put('/{activo}', [ActivoController::class, 'update'])->name('update');
+    /*
+    |------------------------- ACTIVOS -------------------------
+    */
+    Route::prefix('activos')->name('activos.')->middleware('activos')->group(function () {
+        Route::get('/', [ActivoController::class, 'index'])->name('index');
+        Route::get('/{activo}/editar', [ActivoController::class, 'edit'])->name('edit');
+        Route::put('/{activo}', [ActivoController::class, 'update'])->name('update');
+    });
+
+    /*
+    |------------------------- ETIQUETAS ESPECIALES -------------------------
+    | SOLO LABORATORIO (sin selección de fórmula)
+    */
+    Route::middleware([EtiquetasAccess::class])
+        ->prefix('etiquetas-especiales')
+        ->name('etiquetas_especiales.')
+        ->group(function () {
+    
+            Route::view('/martinez',  'etiquetas_especiales.martinez')->name('martinez');
+            Route::view('/julisa',    'etiquetas_especiales.julisa')->name('julisa');
+            Route::view('/balance',   'etiquetas_especiales.balance')->name('balance');
+            Route::view('/mesalbuda', 'etiquetas_especiales.mesalbuda')->name('mesalbuda');
+            Route::view('/editable',  'etiquetas_especiales.editable')->name('editable');
         });
+
 
     /*
     |------------------------- Logout -------------------------
