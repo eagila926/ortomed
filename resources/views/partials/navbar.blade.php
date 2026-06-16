@@ -168,6 +168,7 @@
               <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.balance') }}">Dra Viteri</a></li>
               <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.mesalbuda') }}">Mesalbuda</a></li>
               <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.editable') }}">Editable</a></li>
+              <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.naturmed') }}">Naturmed</a></li>
             </ul>
           </li>
         @endif

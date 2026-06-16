@@ -116,22 +116,185 @@
 <body>
     <!-- ===== MODAL de Recetas ===== -->
 <style>
-  /* Opcional: oscurecer fondo del <dialog> nativo */
-  #dlg-recetas::backdrop { background: rgba(0,0,0,.35); }
-  .btn-primary {
-    padding: 8px 14px; background:#0d6efd; border:none; color:#fff; border-radius:8px;
+  #dlg-recetas::backdrop {
+    background: rgba(15,23,42,.45);
   }
-  .btn-outline { padding:8px 14px; border:1px solid #bbb; background:#fff; border-radius:8px; }
-  .form-row { margin-bottom:10px; }
-  .sugs-panel {
-    position:absolute; left:0; top:calc(100% + 4px); z-index:1000; background:#fff;
-    border:1px solid #ddd; width:100%; max-height:220px; overflow-y:auto;
-    box-shadow:0 6px 18px rgba(0,0,0,.08);
-  }
-  .sugs-item { padding:6px 10px; cursor:pointer; }
-  .sugs-item:hover { background:#f5f7fb; }
-</style>
 
+  #dlg-recetas {
+    border: none;
+    border-radius: 18px;
+    padding: 0;
+    max-width: 780px;
+    width: 96%;
+    box-shadow: 0 18px 45px rgba(15,23,42,0.38);
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  .dlg-recetas__header {
+    padding: 16px 24px;
+    border-bottom: 1px solid #e5e7eb;
+    background: linear-gradient(135deg,#0d6efd,#2563eb);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-top-left-radius: 18px;
+    border-top-right-radius: 18px;
+  }
+  .dlg-recetas__title {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 650;
+  }
+  .dlg-recetas__subtitle {
+    margin: 2px 0 0;
+    font-size: 13px;
+    opacity: .9;
+  }
+  .dlg-recetas__badge {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(15,23,42,.18);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .dlg-recetas__body {
+    padding: 18px 24px 16px;
+    background: #f9fafb;
+  }
+
+  .dlg-recetas__grid {
+    display: grid;
+    gap: 14px 18px;
+  }
+  @media (min-width: 640px) {
+    .dlg-recetas__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  .form-row {
+    margin: 0;
+    font-size: 14px;
+  }
+  .form-row label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #111827;
+  }
+  .form-row small {
+    font-size: 12px;
+  }
+
+  .dlg-recetas__input,
+  .dlg-recetas__input-date {
+    width: 100%;
+    padding: 7px 9px;
+    border-radius: 8px;
+    border: 1px solid #d1d5db;
+    font-size: 14px;
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
+    background: #ffffff;
+  }
+  .dlg-recetas__input:focus,
+  .dlg-recetas__input-date:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 1px rgba(37,99,235,.25);
+  }
+
+  .dlg-recetas__input[readonly] {
+    background:#f3f4f6;
+    color:#6b7280;
+  }
+
+  .dlg-recetas__footer {
+    padding: 10px 24px 16px;
+    border-top: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    background: #f9fafb;
+    border-bottom-left-radius: 18px;
+    border-bottom-right-radius: 18px;
+  }
+
+  .btn-primary {
+    padding: 8px 16px;
+    background:#0d6efd;
+    border:none;
+    color:#fff;
+    border-radius:999px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    box-shadow:0 6px 14px rgba(37,99,235,.35);
+    transition: background .15s ease, transform .08s ease, box-shadow .15s ease, opacity .15s ease;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background:#0b5ed7;
+    transform: translateY(-1px);
+    box-shadow:0 10px 24px rgba(37,99,235,.40);
+  }
+  .btn-primary:disabled {
+    opacity:.55;
+    cursor:not-allowed;
+    box-shadow:none;
+  }
+
+  .btn-outline {
+    padding: 8px 16px;
+    border-radius:999px;
+    border:1px solid #d1d5db;
+    background:#ffffff;
+    font-size:14px;
+    font-weight:500;
+    cursor:pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  .btn-outline:hover {
+    background:#f3f4f6;
+    border-color:#9ca3af;
+  }
+
+  .sugs-panel {
+    position:absolute;
+    left:0;
+    top:calc(100% + 4px);
+    z-index:1000;
+    background:#fff;
+    border:1px solid #d1d5db;
+    width:100%;
+    max-height:230px;
+    overflow-y:auto;
+    box-shadow:0 14px 30px rgba(15,23,42,.25);
+    border-radius:10px;
+  }
+  .sugs-item {
+    padding:8px 11px;
+    cursor:pointer;
+    font-size:13px;
+  }
+  .sugs-item:hover {
+    background:#eff6ff;
+  }
+  .sugs-item.empty {
+    color:#9ca3af;
+    cursor:default;
+  }
+
+  #medico_sel {
+    font-size:12px;
+    color:#4b5563;
+  }
+  
+</style>
 @php
   $canRecetas = auth()->check() && auth()->user()->hasRole(['Admin','Laboratorio']);
 @endphp
@@ -363,7 +526,6 @@
 @endif
 <!-- ===== FIN MODAL ===== -->
 
-
 <div class="container">
 
     {{-- Título (EDITABLE) --}}
@@ -436,31 +598,35 @@
 </div>
 
 <script>
-  // 1) Permitir saltos de línea SOLO en el título
-  const titulo = document.querySelector('.editable.nombre-etiqueta');
-
-  // 2) El resto de editables: sin Enter (una sola línea)
   document.querySelectorAll('.editable').forEach(el => {
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        // Permitir Enter en el título
-        if (el.classList.contains('nombre-etiqueta')) return;
+    // Evitar enter
+//    el.addEventListener('keydown', (e) => {
+  //    if (e.key === 'Enter') {
+//        e.preventDefault();
+ //       el.blur();
+  //    }
+//    });
 
-        // Bloquear Enter en los demás
-        e.preventDefault();
-        el.blur();
-      }
+    // Pegar solo texto plano
+    el.addEventListener('paste', (e) => {
+      e.preventDefault();
+
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+
+      // insertar texto sin formato
+      document.execCommand('insertText', false, text.replace(/\r?\n/g, ' '));
     });
   });
 
-  // Limitar a números los campos marcados como solo-números (se mantiene igual)
+  // Limitar a números los campos marcados como solo-números
   document.querySelectorAll('.js-only-numbers').forEach(el => {
     el.addEventListener('input', () => {
       el.textContent = (el.textContent || '').replace(/[^\d]/g, '');
     });
+
     el.addEventListener('paste', (e) => {
       e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text');
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
       const clean = (text || '').replace(/[^\d]/g, '');
       document.execCommand('insertText', false, clean);
     });

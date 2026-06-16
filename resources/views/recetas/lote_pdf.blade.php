@@ -5,88 +5,176 @@
 <style>
   @page { margin: 28px; }
   body { font-family: DejaVu Sans, sans-serif; font-size: 12px; color:#000; }
+
   h1 { font-size: 20px; margin: 0 0 12px; font-weight: 700; }
+
   .row { width:100%; }
   .col-6 { display:inline-block; width:49%; vertical-align:top; }
   .right { text-align:right; }
+
   .label { font-weight:700; }
-  .mt-1{ margin-top:6px; } .mt-2{ margin-top:10px; } .mt-3{ margin-top:16px; } .mt-4{ margin-top:22px; }
-  .mb-1{ margin-bottom:6px; } .mb-2{ margin-bottom:10px; } .mb-3{ margin-bottom:16px; }
+
+  .mt-1{ margin-top:6px; }
+  .mt-2{ margin-top:10px; }
+  .mt-3{ margin-top:16px; }
+  .mt-4{ margin-top:22px; }
+
+  .mb-1{ margin-bottom:6px; }
+  .mb-2{ margin-bottom:10px; }
+  .mb-3{ margin-bottom:16px; }
+
   .hr { border:0; height:1px; background:#000; margin: 10px 0 14px; }
+
   .comp { width:100%; border-collapse:collapse; }
   .comp td { padding:3px 0; }
   .comp td:nth-child(1){ font-weight:700; }
-  .comp td:nth-child(2){ text-align:right; font-weight:700; white-space:nowrap; }
-  .firma-box { margin-top:30px; }
-  .firma-img { height:70px; }
-  .footer { font-size:11px; margin-top:8px; line-height:1.3; }
+  .comp td:nth-child(2){
+    text-align:right;
+    font-weight:700;
+    white-space:nowrap;
+  }
+
+  /* Encabezado centrado */
+  .header-center { text-align:center; margin-bottom: 8px; }
+  .header-line { line-height:1.25; }
+  .header-centro { font-weight:700; font-size:13px; }
+  .header-doctor { font-weight:700; font-size:13px; text-transform:uppercase; }
+  .header-sub { font-size:12px; }
+
+  /* Firma */
+  
+  .firma-box { 
+    margin-top:40px; 
+    text-align:center;   /* centrada */
+  }
+    
+  .firma-img { 
+    height:160px;        /* aumenta tamaño */
+    width:auto;          /* mantiene proporción */
+  }
+
+  /* salto de página entre recetas */
   .page-break { page-break-after: always; }
 </style>
 </head>
 <body>
-@foreach($lote as $i => $rec)
+
+@php
+  // Seguridad: si llega null o falta alguna key
+  $lote = $lote ?? collect();
+@endphp
+
+@foreach($lote as $i => $pack)
   @php
-    /** @var \App\Models\Receta $rec['r'] */
-    $receta        = $rec['r'];
-    $formula       = $rec['formula'];
-    $items         = $rec['items'];
-    $medico        = $rec['medico'];
-    $doctorDisplay = $rec['doctorDisplay'] ?? '';
-    $firmaBase64   = $rec['firmaBase64'] ?? null;
-    $tomas       = (int) ($formula->tomas_diarias ?? 2);
-    $excluir     = [70274,70272,70275,70273,1101,1078,1077,1219,70276,70271,71497];
-    $itemsPdf    = collect($items ?? [])->filter(fn($it) => !in_array((int)($it->cod_odoo ?? 0), $excluir));
-    $correo = $medico->email ?? $medico->correo ?? null;
-    $tel    = $medico->telefono ?? $medico->celular ?? null;
-    $dir    = $medico->direccion ?? null;
-    $name    = $medico->full_name ?? null;
+    $receta      = data_get($pack, 'r');
+    $formula     = data_get($pack, 'formula');
+    $items       = collect(data_get($pack, 'items', []));
+    $medico      = data_get($pack, 'medico');
+    $firmaBase64 = data_get($pack, 'firmaBase64');
+
+    // Encabezado según tu tabla medicos
+    $centro = trim((string) data_get($medico, 'centro_medico', ''));
+    $nombre = trim((string) data_get($medico, 'full_name', ''));
+    $dir    = trim((string) data_get($medico, 'direccion', ''));
+    $tel    = trim((string) data_get($medico, 'telefono', ''));
+
+    // FallBack por si full_name viene vacío
+    if ($nombre === '') {
+      $nombre = trim((string) data_get($pack, 'doctorDisplay', ''));
+    }
+
+    // Posología
+    $tomas = (int) (data_get($formula, 'tomas_diarias', 2));
+
+    // Excluir auxiliares
+    $excluir = [70274,70272,70275,70273,1101,1078,1077,1219,70276,70271,71497];
+    $itemsPdf = $items->filter(fn($it) => !in_array((int) data_get($it, 'cod_odoo', 0), $excluir))->values();
   @endphp
 
-  <div class="row">
-    <div class="col-6"><h1>RECETARIO MEDICO</h1></div>
-    <div class="col-6 right">
-      <div class="label"><h1>Dr/a: {{ $name }}</h1></div>
-    </div>
+  {{-- ================== ENCABEZADO ================== --}}
+  <div class="header-center">
+    @if($centro !== '')
+      <div class="header-line header-centro">{{ $centro }}</div>
+    @endif
+
+    @if($nombre !== '')
+      <div class="header-line header-doctor">
+        {{ 'DR.(a) ' . mb_strtoupper($nombre, 'UTF-8') }}
+      </div>
+    @else
+      <div class="header-line header-doctor">DR.(a)</div>
+    @endif
+
+    @if($dir !== '')
+      <div class="header-line header-sub">{{ $dir }}</div>
+    @endif
+
+    @if($tel !== '')
+      <div class="header-line header-sub">{{ $tel }}</div>
+    @endif
   </div>
+
   <hr class="hr">
 
+  {{-- ================== FECHA / SO / PACIENTE ================== --}}
   <div class="row">
     <div class="col-6">
-      <div class="mb-1"><span class="label">Fecha:</span> {{ \Carbon\Carbon::parse($receta->fecha)->format('d-m-Y') }}</div>
-      <div class="mb-1"><span class="label">SO:</span> {{ $receta->so }}</div>
+      <div class="mb-1">
+        <span class="label">Fecha:</span>
+        {{ $receta? \Carbon\Carbon::parse($receta->fecha)->format('d-m-Y') : '' }}
+      </div>
+      <div class="mb-1">
+        <span class="label">SO:</span>
+        {{ $receta->so ?? '' }}
+      </div>
     </div>
+
     <div class="col-6 right">
       <div class="mb-1">
-        <span class="label">Paciente:</span> {{ $receta->paciente }}
-        
+        <span class="label">Paciente:</span>
+        {{ $receta->paciente ?? '' }}
       </div>
-      
     </div>
   </div>
 
+  {{-- ================== PRODUCTO ================== --}}
   <div class="mt-3">
     <div class="label">Producto:</div>
-    <div>{{ $formula->nombre_etiqueta ?? $receta->codigo_formula }}</div>
-    <p><strong>N.º de frascos:</strong> {{ $receta->num_frascos }}</p>
+    <div>
+      {{ data_get($formula, 'nombre_etiqueta') ?? ($receta->codigo_formula ?? '') }}
+    </div>
+
+    <p>
+      <strong>Duracion de tratamiento 30 días</strong>
+    </p>
   </div>
 
+  {{-- ================== POSOLOGÍA ================== --}}
   <div class="mt-3">
     <div class="label">Posología:</div>
-    <div class="label">TOMAR {{ $tomas }} CÁPSULAS DIARIAS</div>
+    <div class="label">
+      TOMAR {{ $tomas }} CÁPSULAS DIARIAS
+    </div>
   </div>
 
+  {{-- ================== COMPOSICIÓN ================== --}}
   <div class="mt-3">
     <div class="label">Composición:</div>
+
     <table class="comp">
       @foreach($itemsPdf as $it)
         <tr>
-          <td>{{ $it->activo }}</td>
-          <td>{{ number_format((float)$it->cantidad,2) }} {{ $it->unidad ?? 'mg' }}</td>
+          <td>{{ data_get($it, 'activo') }}</td>
+          <td>
+            {{ number_format((float) data_get($it, 'cantidad', 0), 2) }}
+            {{ data_get($it, 'unidad', 'mg') }}
+          </td>
         </tr>
       @endforeach
     </table>
   </div>
 
+  {{-- ================== FIRMA (solo firma) ================== --}}
   <div class="firma-box">
     @if(!empty($firmaBase64))
       <img class="firma-img" src="data:image/png;base64,{{ $firmaBase64 }}" alt="Firma">
@@ -95,15 +183,11 @@
     <div>Firma</div>
   </div>
 
-  <div class="footer mt-3">
-    @if($correo) Correo: {{ $correo }}<br>@endif
-    @if($tel) Teléfono: {{ $tel }}<br>@endif
-    @if($dir) Dirección: {{ $dir }} @endif
-  </div>
-
+  {{-- salto página excepto última --}}
   @if($i < count($lote) - 1)
     <div class="page-break"></div>
   @endif
 @endforeach
+
 </body>
 </html>

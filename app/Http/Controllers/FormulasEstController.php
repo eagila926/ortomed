@@ -15,7 +15,7 @@ class FormulasEstController extends Controller
     public const SESSION_KEY = 'fe_items';
     private const TIPO_ETIQUETA = [
         'Seleccionar','Dr Redin','Dr Li','Dr Walter','Dra Maria Delia',
-        'Dra Viteri','Dra Bernarda','M Urdiales','Naturmed','Sobre'
+        'Dra Viteri','Dra Bernarda','M Urdiales','Naturmed','Julissa','Sobre'
     ];
 
     public function index(Request $request)
@@ -163,6 +163,7 @@ class FormulasEstController extends Controller
             'Dra Bernarda'    => 'bernarda',
             'M Urdiales'      => 'urdiales',
             'Naturmed'        => 'naturmed',
+            'Julissa'        => 'julissa',
             'Sobre'           => 'sobre',
         ];
 

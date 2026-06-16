@@ -45,6 +45,7 @@
     color: #111;
     text-align: left;
     white-space: nowrap;
+    margin-right: -40px;
   }
 
   .bloque-balance input{
@@ -373,11 +374,6 @@
   <div class="row-line">
     <span class="lbl">Elab:</span>
     <input class="in-date" type="text" value="{{ $elab }}">
-  </div>
-
-  <div class="row-line">
-    <span class="lbl">Exp:</span>
-    <input class="in-date" type="text" value="{{ $exp }}">
   </div>
 
   <div class="row-line">

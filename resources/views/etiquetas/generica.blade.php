@@ -106,7 +106,17 @@
 
     .editable { border-bottom: 1px dashed #bbb; padding: 2px 4px; display: inline-block; }
     .editable:focus { outline: 2px solid #ddeaff; border-bottom-color: transparent; }
-    .nombre-etiqueta { font-size: {{ $fontSizeTitulo }}; font-weight: 700; background: transparent; width: 100%; text-align: left; }
+    .nombre-etiqueta {
+        font-size: {{ $fontSizeTitulo }};
+        font-weight: 700;
+        background: transparent;
+        width: 100%;
+        text-align: left;
+    
+        white-space: normal;      /* clave */
+        word-break: break-word;   /* evita desbordes */
+        line-height: 1.2;
+    }
     .pte { font-weight: bold; font-size: 20px; background: transparent; width: 100%; text-align: left; }
     .so  { font-weight: bold; font-size: 24px; background: transparent; width: 100%; text-align: left; }
 
@@ -116,6 +126,22 @@
 
     @media print {
       .editable { border: none !important; }
+    }
+    .editable {
+    border-bottom: 1px dashed #bbb;
+    padding: 2px 4px;
+    display: inline-block;
+    white-space: nowrap;
+    }
+    
+    .so {
+        font-weight: bold;
+        font-size: 24px;
+        background: transparent;
+        text-align: left;
+        white-space: nowrap;
+        line-height: 1.1;
+        min-width: 220px;
     }
 </style>
 </head>
@@ -299,6 +325,7 @@
     font-size:12px;
     color:#4b5563;
   }
+  
 </style>
 @php
   $canRecetas = auth()->check() && auth()->user()->hasRole(['Admin','Laboratorio']);
@@ -606,21 +633,38 @@
 </div>
 
 <script>
-  // Evitar saltos de línea en contenteditable; permitir solo una línea
   document.querySelectorAll('.editable').forEach(el => {
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+      el.addEventListener('keydown', (e) => {
+        // permitir salto de línea SOLO en nombre de etiqueta
+        if (e.key === 'Enter' && !el.classList.contains('nombre-etiqueta')) {
+          e.preventDefault();
+          el.blur();
+        }
+      });
+    
+      el.addEventListener('paste', (e) => {
+        e.preventDefault();
+    
+        let text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    
+        // permitir saltos SOLO en nombre-etiqueta
+        if (!el.classList.contains('nombre-etiqueta')) {
+          text = text.replace(/\r?\n/g, ' ');
+        }
+    
+        document.execCommand('insertText', false, text);
+      });
     });
-  });
 
   // Limitar a números los campos marcados como solo-números
   document.querySelectorAll('.js-only-numbers').forEach(el => {
     el.addEventListener('input', () => {
       el.textContent = (el.textContent || '').replace(/[^\d]/g, '');
     });
+
     el.addEventListener('paste', (e) => {
       e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text');
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
       const clean = (text || '').replace(/[^\d]/g, '');
       document.execCommand('insertText', false, clean);
     });

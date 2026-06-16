@@ -198,6 +198,7 @@ Route::middleware('auth')->group(function () {
             Route::view('/balance',   'etiquetas_especiales.balance')->name('balance');
             Route::view('/mesalbuda', 'etiquetas_especiales.mesalbuda')->name('mesalbuda');
             Route::view('/editable',  'etiquetas_especiales.editable')->name('editable');
+            Route::view('/naturmed', 'etiquetas_especiales.naturmed')->name('naturmed');
         });
 
 

@@ -305,8 +305,8 @@
     font-size:12px;
     color:#4b5563;
   }
+  
 </style>
-
 @php
   $canRecetas = auth()->check() && auth()->user()->hasRole(['Admin','Laboratorio']);
 @endphp
@@ -621,22 +621,35 @@
 </div>
 
 <script>
-  // Evitar saltos de línea en contenteditable; permitir solo una línea
   document.querySelectorAll('.editable').forEach(el => {
+    // Evitar enter
     el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        el.blur();
+      }
+    });
+
+    // Pegar solo texto plano
+    el.addEventListener('paste', (e) => {
+      e.preventDefault();
+
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+
+      // insertar texto sin formato
+      document.execCommand('insertText', false, text.replace(/\r?\n/g, ' '));
     });
   });
 
   // Limitar a números los campos marcados como solo-números
   document.querySelectorAll('.js-only-numbers').forEach(el => {
     el.addEventListener('input', () => {
-      // Mantén solo dígitos
       el.textContent = (el.textContent || '').replace(/[^\d]/g, '');
     });
+
     el.addEventListener('paste', (e) => {
       e.preventDefault();
-      const text = (e.clipboardData || window.clipboardData).getData('text');
+      const text = (e.clipboardData || window.clipboardData).getData('text/plain');
       const clean = (text || '').replace(/[^\d]/g, '');
       document.execCommand('insertText', false, clean);
     });

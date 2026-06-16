@@ -316,9 +316,9 @@ class FormulaController extends Controller
             [$vc,$fv,$cant,$sub] = $calcSubtotal(70256, 1500/30);
             [$dens,$g_dia,$ml_dia,$g_mes] = $calcPesaje(70256, 1500/30);
             $rows->push([
-                'cod_odoo'=>70256,'activo'=>'CLIGHT','cantidad'=>1500,'unidad'=>'mg',
+                'cod_odoo'=>70256,'activo'=>'CLIGHT','cantidad'=>7000,'unidad'=>'mg',
                 'cantidad_total'=>$cant,'valor_costo'=>$vc,'factor_venta'=>$fv,'subtotal'=>$sub,
-                'densidad'=>$dens,'cant_total_pesaje'=>$g_dia,'vol_ml'=>$ml_dia,'masa_mes'=>1.5,
+                'densidad'=>$dens,'cant_total_pesaje'=>$g_dia,'vol_ml'=>$ml_dia,'masa_mes'=>7,
             ]);
 
             [$vc,$fv,$cant,$sub] = $calcSubtotal(9585, 100/30);

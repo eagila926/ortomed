@@ -30,9 +30,9 @@ class RecetaCreadaMail extends Mailable
         // === Nombre DR/A con fallbacks
         $doctorDisplay = '';
         if ($medico) {
-            $doctorDisplay = trim(($medico->nombres ?? '').' '.($medico->apellidos ?? ''));
-            if ($doctorDisplay === '') $doctorDisplay = $medico->nombre  ?? '';
-            if ($doctorDisplay === '') $doctorDisplay = $medico->name    ?? '';
+            $doctorDisplay = trim((string)($medico->full_name ?? ''));
+            if ($doctorDisplay === '') $doctorDisplay = $medico->nombre ?? '';
+            if ($doctorDisplay === '') $doctorDisplay = $medico->name ?? '';
         }
         if ($doctorDisplay === '' && $formula?->medico) {
             $doctorDisplay = $formula->medico;
