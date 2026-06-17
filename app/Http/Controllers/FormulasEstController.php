@@ -8,7 +8,10 @@ use App\Models\FormulaItem;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse; 
-
+use App\Models\Receta;
+use App\Models\Medico;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\Storage;
 
 class FormulasEstController extends Controller
 {
@@ -310,5 +313,155 @@ class FormulasEstController extends Controller
             'Cache-Control'       => 'max-age=0, no-cache, no-store, must-revalidate',
             'Pragma'              => 'public',
         ]);
+    }
+
+    /**
+     * Crear una `Receta` simple para esta fórmula y devolver el PDF descargable.
+     * El formulario cliente debe enviar: `so` (required numeric), `cedula_medico` (required),
+     * `paciente` (optional), `num_frascos` (optional, default 1).
+     */
+    public function recetaCreate(Request $request, int $id)
+    {
+        $f = Formula::findOrFail($id);
+
+        $data = $request->validate([
+            'so'             => ['required','regex:/^\\d+$/'],
+            'cedula_medico'  => ['required','string','max:50'],
+            'paciente'       => ['nullable','string','max:120'],
+            'num_frascos'    => ['nullable','integer','min:1','max:200'],
+        ],[
+            'so.regex' => 'El campo SO solo debe contener números.',
+        ]);
+
+        $n = (int) ($data['num_frascos'] ?? 1);
+
+        // Verificar médico en BD
+        $medico = Medico::where('cedula', $data['cedula_medico'])->first();
+        if (!$medico) {
+            if ($request->ajax()) {
+                return response()->json([
+                    'message' => 'El médico no existe.',
+                    'errors'  => ['cedula_medico' => ['El médico no existe.']],
+                ], 422);
+            }
+            return redirect()->back()->withErrors(['cedula_medico' => 'El médico no existe.']);
+        }
+
+        if (!$medico->firma) {
+            if ($request->ajax()) {
+                return response()->json([
+                    'message' => 'El médico no tiene firma registrada en la base de datos.',
+                    'errors'  => ['cedula_medico' => ['El médico no tiene firma registrada en la base de datos.']],
+                ], 422);
+            }
+            return redirect()->back()->withErrors(['cedula_medico' => 'El médico no tiene firma registrada en la base de datos.']);
+        }
+
+        // Intentar obtener el archivo de firma (si no existe, continuar sin imagen)
+        $firmaBase64 = null;
+        if (!empty($medico->firma_path)) {
+            $p = $medico->firma_path;
+            $rel = str_starts_with($p, 'public/') ? substr($p, 7) : $p;
+            if (Storage::disk('public')->exists($rel)) {
+                $firmaBase64 = base64_encode(Storage::disk('public')->get($rel));
+            } elseif (file_exists(public_path($p))) {
+                $firmaBase64 = base64_encode(file_get_contents(public_path($p)));
+            } elseif (Storage::exists($p)) {
+                $firmaBase64 = base64_encode(Storage::get($p));
+            }
+        }
+        if (!$firmaBase64) {
+            $probe = 'firmas/'.$medico->cedula.'.png';
+            if (Storage::disk('public')->exists($probe)) {
+                $firmaBase64 = base64_encode(Storage::disk('public')->get($probe));
+            } else {
+                $probe2 = public_path('images/firmas/'.$medico->cedula.'.png');
+                if (file_exists($probe2)) $firmaBase64 = base64_encode(file_get_contents($probe2));
+            }
+        }
+
+        $createdIds = [];
+        if ($n <= 1) {
+            $r = Receta::create([
+                'so'             => $data['so'],
+                'codigo_formula' => $f->codigo,
+                'fecha'          => now()->toDateString(),
+                'cedula_medico'  => $data['cedula_medico'],
+                'paciente'       => $data['paciente'] ?? '',
+                'num_frascos'    => 1,
+            ]);
+            $createdIds[] = $r->getKey();
+        } else {
+            for ($i = 0; $i < $n; $i++) {
+                $r = Receta::create([
+                    'so'             => $data['so'],
+                    'codigo_formula' => $f->codigo,
+                    'fecha'          => now()->toDateString(),
+                    'cedula_medico'  => $data['cedula_medico'],
+                    'paciente'       => $this->randomName(),
+                    'num_frascos'    => 1,
+                ]);
+                $createdIds[] = $r->getKey();
+            }
+        }
+
+        // Si se creó una sola receta, retornar PDF simple
+        if (count($createdIds) === 1) {
+            $receta = Receta::findOrFail($createdIds[0]);
+            $formula = Formula::with('items')->where('codigo', $receta->codigo_formula)->first();
+            $items = $formula?->items->filter(fn($it)=>true)->values() ?? collect();
+
+            $pdf = Pdf::loadView('recetas.pdf', [
+                'receta'      => $receta,
+                'formula'     => $formula,
+                'items'       => $items,
+                'medico'      => $medico,
+                'firmaBase64' => $firmaBase64,
+            ])->setPaper('a4');
+
+            $filename = 'Receta-'.$receta->codigo_formula.'-SO'.$receta->so.'.pdf';
+            return response($pdf->output(), 200, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            ]);
+        }
+
+        // Si se crearon varias recetas, generar PDF multipágina
+        $recetas = Receta::whereIn('id_receta', $createdIds)->get();
+        $dataPdf = $recetas->map(function($r) {
+            $formula = Formula::with('items')->where('codigo', $r->codigo_formula)->first();
+            $items = $formula?->items ?? collect();
+            $medico = Medico::where('cedula', $r->cedula_medico)->first();
+            $firma = null;
+            if ($medico) {
+                $probe = 'firmas/'.$medico->cedula.'.png';
+                if (Storage::disk('public')->exists($probe)) $firma = base64_encode(Storage::disk('public')->get($probe));
+                else {
+                    $p2 = public_path('images/firmas/'.$medico->cedula.'.png');
+                    if (file_exists($p2)) $firma = base64_encode(file_get_contents($p2));
+                }
+            }
+            return [
+                'r' => $r,
+                'formula' => $formula,
+                'items' => $items,
+                'medico' => $medico,
+                'firmaBase64' => $firma,
+            ];
+        });
+
+        $pdf = Pdf::loadView('recetas.lote_pdf', ['lote' => $dataPdf])->setPaper('a4');
+        $filename = 'Recetas-'.now()->format('Ymd_His').'.pdf';
+        return response($pdf->output(), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
+    private function randomName(): string
+    {
+        $nombres = ['Juan','María','Pedro','Luisa','Carlos','Ana','Jorge','Sofía','Diego','Daniela','Andrés','Valeria','Miguel','Camila','Felipe','Fernanda','Pablo','Paola','Ricardo','Andrea','Elvis'];
+        $apellidos = ['García','Rodríguez','Martínez','López','González','Pérez','Sánchez','Ramírez','Torres','Flores','Vargas','Castro','Rojas','Moreno','Guerrero','Mendoza'];
+        return $nombres[random_int(0, count($nombres)-1)] . ' ' . $apellidos[random_int(0, count($apellidos)-1)];
     }
 }

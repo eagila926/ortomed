@@ -9,22 +9,16 @@ class Medico extends Model
 {
     use HasFactory;
 
-    // Nombre de la tabla
     protected $table = 'medicos';
 
-    // Clave primaria
     protected $primaryKey = 'cedula';
 
-    // Como la PK es varchar, le decimos a Eloquent que no es incremental
     public $incrementing = false;
 
-    // Tipo de la clave primaria
     protected $keyType = 'string';
 
-    // Si no usas created_at / updated_at
     public $timestamps = false;
 
-    // Campos asignables en masa
     protected $fillable = [
         'cedula',
         'full_name',
@@ -33,11 +27,13 @@ class Medico extends Model
         'direccion',
         'telefono',
         'user_id',
+        'firma',
     ];
 
-    /**
-     * Relación con la tabla usuarios (si existe).
-     */
+    protected $casts = [
+        'firma' => 'boolean',
+    ];
+
     public function usuario()
     {
         return $this->belongsTo(User::class, 'user_id', 'id_user');

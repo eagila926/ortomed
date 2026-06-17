@@ -73,6 +73,10 @@
                 title="Editar">
                 <i class="bi bi-pencil-square"></i>
               </a>
+                {{-- Generar receta PDF --}}
+                <button type="button" class="btn btn-outline-secondary btn-sm btn-receta-pdf" data-id="{{ $r->id }}" data-codigo="{{ $r->codigo }}" title="Receta PDF">
+                  <i class="bi bi-file-earmark-pdf"></i>
+                </button>
 
               </td>
               <td>{{ number_format($r->precio_medico,2) }}</td>
@@ -99,6 +103,9 @@
 
 <script>
 (function(){
+  const isVisitador = {{ auth()->user() && auth()->user()->hasRole(['Visitador']) ? 'true' : 'false' }};
+  let medicoSeleccionado = null;
+
   const $buscador = document.getElementById('buscador');
   const $sugs     = document.getElementById('sugerencias');
   const $idHidden = document.getElementById('formula_id');
@@ -107,7 +114,7 @@
   let t=null;
   $buscador.addEventListener('input', function(){
     const q = this.value.trim();
-    $idHidden.value=''; $btnAdd.disabled = true;
+    $idHidden.value=''; $btnAdd.disabled = true;    
 
     if (t) clearTimeout(t);
     if (q.length < 2) { $sugs.style.display='none'; $sugs.innerHTML=''; return; }
@@ -149,5 +156,274 @@
     });
   });
 })();
+
+// --- Visitador modal: obliga a seleccionar médico con firma antes de buscar/añadir ---
+if ({{ auth()->user() && auth()->user()->hasRole(['Visitador']) ? 'true' : 'false' }}) {
+  const buscador = document.getElementById('buscador');
+  const btnAdd = document.getElementById('btn-add');
+  let medicoSeleccionado = null;
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // inicialmente bloquea el buscador
+    if (buscador) buscador.disabled = true;
+    if (btnAdd) btnAdd.disabled = true;
+    abrirModalMedicoEstablecidas();
+  });
+
+  function abrirModalMedicoEstablecidas() {
+    const modalId = 'modalMedicoVisitadorFE';
+    if (!document.getElementById(modalId)) {
+      const html = `
+      <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title">Seleccionar médico</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">Buscar médico</label>
+                <input id="buscaMedFE" class="form-control" placeholder="Nombre o cédula" autocomplete="off">
+              </div>
+              <div id="resMedFE" class="list-group"></div>
+              <div id="infoMedFE" class="mt-3 d-none alert"></div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+              <button type="button" id="confMedFE" class="btn btn-primary" disabled>Aceptar</button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+      document.body.insertAdjacentHTML('beforeend', html);
+    }
+
+    const modalEl = document.getElementById(modalId);
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    const $input = document.getElementById('buscaMedFE');
+    const $res   = document.getElementById('resMedFE');
+    const $info  = document.getElementById('infoMedFE');
+    const $btn   = document.getElementById('confMedFE');
+
+    let tt=null;
+    $input.addEventListener('input', function () {
+      const q = this.value.trim();
+      $res.innerHTML = '';
+      $info.classList.add('d-none'); $info.textContent=''; $btn.disabled=true;
+      if (tt) clearTimeout(tt);
+      if (q.length < 2) return;
+      tt = setTimeout(()=>{
+        fetch(`{{ route('medicos.buscar') }}?q=`+encodeURIComponent(q))
+          .then(r=>r.json()).then(data=>{
+            $res.innerHTML='';
+            if (!Array.isArray(data) || data.length===0) { $res.innerHTML='<div class="list-group-item">No se encontraron médicos.</div>'; return; }
+            data.forEach(it=>{
+              const firmaOk = !!it.firma;
+              const btn = document.createElement('button');
+              btn.type='button'; btn.className='list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+              btn.innerHTML = `<span>${it.label}</span>${firmaOk?'<span class="badge bg-success ms-2">Firma OK</span>':'<span class="badge bg-danger ms-2">Sin firma</span>'}`;
+              btn.addEventListener('click', function(){
+                medicoSeleccionado = { cedula: it.cedula, nombre: it.label, firma: firmaOk };
+                if (firmaOk) {
+                  $info.classList.remove('d-none'); $info.classList.remove('alert-danger'); $info.classList.add('alert-success');
+                  $info.innerHTML = `Médico seleccionado: <strong>${it.label}</strong>. Puede buscar fórmulas.`;
+                  $btn.disabled = false;
+                } else {
+                  medicoSeleccionado = null;
+                  $info.classList.remove('d-none'); $info.classList.remove('alert-success'); $info.classList.add('alert-danger');
+                  $info.innerHTML = `El médico <strong>${it.label}</strong> no tiene firma registrada. Falta documentos para realizar pedidos.`;
+                  $btn.disabled = true;
+                }
+              });
+              $res.appendChild(btn);
+            });
+          });
+      },180);
+    });
+
+      $btn.addEventListener('click', function(){
+      if (!medicoSeleccionado) return;
+      // habilitar buscador y botones
+      if (buscador) buscador.disabled = false;
+      if (btnAdd) btnAdd.disabled = true; // remains disabled until user selects a formula
+      modal.hide();
+    });
+  }
+}
 </script>
+<!-- Modal: crear receta para fórmula (usable por botón PDF) -->
+<div class="modal fade" id="modalCrearRecetaFE" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <form id="formCrearRecetaFE" method="POST">
+        @csrf
+        <div class="modal-header"><h5 class="modal-title">Generar Receta</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" name="_token" value="{{ csrf_token() }}">
+          <div class="mb-2">
+            <label class="form-label">Fórmula</label>
+            <input type="text" id="receta_formula_display" class="form-control" readonly>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">SO</label>
+            <input type="text" name="so" class="form-control" required pattern="\d+">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Buscar médico</label>
+            <input type="text" id="buscaMedReceta" class="form-control" placeholder="Nombre o cédula" autocomplete="off">
+            <input type="hidden" name="cedula_medico" id="cedula_medico">
+            <div id="resBuscaMedReceta" class="list-group mt-1" style="max-height:180px; overflow:auto; display:none;"></div>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">Paciente (opcional)</label>
+            <input type="text" name="paciente" class="form-control">
+          </div>
+          <div class="mb-2">
+            <label class="form-label">N° frascos</label>
+            <input type="number" name="num_frascos" class="form-control" min="1" value="1">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+          <button type="button" id="btnGenerarRecetaFE" class="btn btn-primary">Generar y descargar PDF</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  const modalEl = document.getElementById('modalCrearRecetaFE');
+  const modal = new bootstrap.Modal(modalEl);
+  const btnGenerar = document.getElementById('btnGenerarRecetaFE');
+  const form = document.getElementById('formCrearRecetaFE');
+  const errorBox = document.createElement('div');
+  errorBox.className = 'alert alert-danger d-none';
+  errorBox.id = 'errorRecetaFE';
+  form.querySelector('.modal-body').insertBefore(errorBox, form.querySelector('.modal-body').firstChild);
+
+  document.querySelectorAll('.btn-receta-pdf').forEach(btn=>{
+    btn.addEventListener('click', function(){
+      const id = this.dataset.id;
+      const codigo = this.dataset.codigo;
+      document.getElementById('receta_formula_display').value = codigo;
+      form.action = `{{ url('formulas/establecidas') }}/${id}/receta`;
+      form.reset();
+      document.getElementById('receta_formula_display').value = codigo;
+      document.getElementById('cedula_medico').value = '';
+      document.getElementById('resBuscaMedReceta').innerHTML = '';
+      document.getElementById('resBuscaMedReceta').style.display = 'none';
+      errorBox.classList.add('d-none');
+      errorBox.textContent = '';
+      try {
+        if (typeof medicoSeleccionado !== 'undefined' && medicoSeleccionado && medicoSeleccionado.cedula) {
+          document.getElementById('cedula_medico').value = medicoSeleccionado.cedula;
+          document.getElementById('buscaMedReceta').value = medicoSeleccionado.nombre || medicoSeleccionado.cedula;
+        }
+      } catch(e){}
+      modal.show();
+    });
+  });
+
+  btnGenerar.addEventListener('click', function(){
+    errorBox.classList.add('d-none');
+    errorBox.textContent = '';
+    const formData = new FormData(form);
+    const url = form.action;
+    btnGenerar.disabled = true;
+    fetch(url, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    }).then(async response => {
+      btnGenerar.disabled = false;
+      const contentType = response.headers.get('Content-Type') || '';
+      if (!response.ok || !contentType.includes('application/pdf')) {
+        const text = await response.text();
+        let message = 'Error al generar la receta.';
+        try {
+          const json = JSON.parse(text);
+          const errors = json.errors || {};
+          message = Object.values(errors).flat().join(' ') || json.message || message;
+        } catch(e) {
+          message = text || message;
+        }
+        errorBox.textContent = message;
+        errorBox.classList.remove('d-none');
+        return;
+      }
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get('Content-Disposition') || '';
+      const filenameMatch = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(contentDisposition);
+      let filename = 'receta.pdf';
+      if (filenameMatch) filename = decodeURIComponent(filenameMatch[1] || filenameMatch[2]);
+      if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+        window.navigator.msSaveOrOpenBlob(blob, filename);
+      } else {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+      }
+      modal.hide();
+    }).catch(err => {
+      btnGenerar.disabled = false;
+      errorBox.textContent = 'No se pudo generar el PDF. Intente otra vez.';
+      errorBox.classList.remove('d-none');
+    });
+  });
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+  const $input = document.getElementById('buscaMedReceta');
+  const $res   = document.getElementById('resBuscaMedReceta');
+  const $hidden= document.getElementById('cedula_medico');
+  if (!$input) return;
+  let tt=null;
+  $input.addEventListener('input', function(){
+    const q = this.value.trim();
+    $res.innerHTML = '';
+    $res.style.display = 'none';
+    $hidden.value = '';
+    if (tt) clearTimeout(tt);
+    if (q.length < 2) return;
+    tt = setTimeout(()=>{
+      fetch(`{{ route('medicos.buscar') }}?q=`+encodeURIComponent(q))
+        .then(r=>r.json()).then(data=>{
+          $res.innerHTML='';
+          if (!Array.isArray(data) || data.length===0) { $res.innerHTML='<div class="list-group-item">No se encontraron médicos.</div>'; $res.style.display='block'; return; }
+          data.forEach(it=>{
+            const firmaOk = !!it.firma;
+            const btn = document.createElement('button');
+            btn.type='button'; btn.className='list-group-item list-group-item-action d-flex justify-content-between align-items-center';
+            btn.innerHTML = `<div><strong>${it.label}</strong><div class="small text-muted">${it.cedula}</div></div>` + (firmaOk? '<span class="badge bg-success">Firma</span>':'<span class="badge bg-danger">Sin firma</span>');
+            btn.addEventListener('click', function(){
+              $hidden.value = it.cedula;
+              $input.value = it.label;
+              $res.innerHTML=''; $res.style.display='none';
+            });
+            $res.appendChild(btn);
+          });
+          $res.style.display='block';
+        }).catch(()=>{});
+    },180);
+  });
+
+  // cerrar sugerencias al click fuera
+  document.addEventListener('click', function(e){ if (!e.target.closest('#resBuscaMedReceta') && e.target!==$input) { $res.style.display='none'; } });
+});
+</script>
+
 @endsection

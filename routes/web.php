@@ -117,6 +117,7 @@ Route::middleware('auth')->group(function () {
             Route::delete('/clear/all', [FormulasEstController::class,'clear'])->name('clear');
 
             Route::get('/{id}/print',   [FormulasEstController::class,'print'])->name('print');
+            Route::post('/{id}/receta',  [FormulasEstController::class,'recetaCreate'])->name('receta.create');
             Route::get('/{id}/excel',   [FormulasEstController::class,'excel'])->name('excel');
 
             Route::get('/{id}/items', [FormulasEstController::class,'items'])->name('items');

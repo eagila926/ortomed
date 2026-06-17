@@ -111,6 +111,8 @@
     headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' }
   });
 
+  // No se aplica restricción para Visitador en "formulas.nuevas"
+
   // Buscar (sugerencias)
   function buscarActivo(valor) {
     if (!valor || valor.length < 1) {
@@ -304,6 +306,10 @@
   // Cargar al entrar
   document.addEventListener('DOMContentLoaded', mostrarActivos);
 
+  document.addEventListener('DOMContentLoaded', function () {
+    // Ya no se restringe el acceso para Visitador en esta vista
+  });
+
 
   // === TOTAL EN MG + REGLAS DE BOTONES ===
     function verificarCondiciones() {
@@ -359,6 +365,8 @@
         $alert.addClass('d-none').text('');
       }
       $btnAdd.prop('disabled', false);
+
+      // No bloqueos por rol Visitador en esta vista
 
 
       if (n >= 10 && n < 15) {
