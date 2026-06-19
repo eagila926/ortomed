@@ -381,11 +381,13 @@ class FormulasEstController extends Controller
         }
 
         $createdIds = [];
+        $fechaReceta = now()->subDays(2)->toDateString();
+
         if ($n <= 1) {
             $r = Receta::create([
                 'so'             => $data['so'],
                 'codigo_formula' => $f->codigo,
-                'fecha'          => now()->toDateString(),
+                'fecha'          => $fechaReceta,
                 'cedula_medico'  => $data['cedula_medico'],
                 'paciente'       => $data['paciente'] ?? '',
                 'num_frascos'    => 1,
@@ -396,7 +398,7 @@ class FormulasEstController extends Controller
                 $r = Receta::create([
                     'so'             => $data['so'],
                     'codigo_formula' => $f->codigo,
-                    'fecha'          => now()->toDateString(),
+                    'fecha'          => $fechaReceta,
                     'cedula_medico'  => $data['cedula_medico'],
                     'paciente'       => $this->randomName(),
                     'num_frascos'    => 1,

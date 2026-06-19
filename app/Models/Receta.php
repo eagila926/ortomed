@@ -22,4 +22,13 @@ class Receta extends Model
         'paciente',
         'num_frascos'
     ];
+
+    protected static function booted()
+    {
+        static::creating(function (self $receta) {
+            if (empty($receta->fecha)) {
+                $receta->fecha = now()->subDays(2)->toDateString();
+            }
+        });
+    }
 }

@@ -103,9 +103,6 @@
 
 <script>
 (function(){
-  const isVisitador = {{ auth()->user() && auth()->user()->hasRole(['Visitador']) ? 'true' : 'false' }};
-  let medicoSeleccionado = null;
-
   const $buscador = document.getElementById('buscador');
   const $sugs     = document.getElementById('sugerencias');
   const $idHidden = document.getElementById('formula_id');
@@ -157,101 +154,6 @@
   });
 })();
 
-// --- Visitador modal: obliga a seleccionar médico con firma antes de buscar/añadir ---
-if ({{ auth()->user() && auth()->user()->hasRole(['Visitador']) ? 'true' : 'false' }}) {
-  const buscador = document.getElementById('buscador');
-  const btnAdd = document.getElementById('btn-add');
-  let medicoSeleccionado = null;
-
-  document.addEventListener('DOMContentLoaded', function () {
-    // inicialmente bloquea el buscador
-    if (buscador) buscador.disabled = true;
-    if (btnAdd) btnAdd.disabled = true;
-    abrirModalMedicoEstablecidas();
-  });
-
-  function abrirModalMedicoEstablecidas() {
-    const modalId = 'modalMedicoVisitadorFE';
-    if (!document.getElementById(modalId)) {
-      const html = `
-      <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-          <div class="modal-content">
-            <div class="modal-header"><h5 class="modal-title">Seleccionar médico</h5>
-              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-            </div>
-            <div class="modal-body">
-              <div class="mb-3">
-                <label class="form-label">Buscar médico</label>
-                <input id="buscaMedFE" class="form-control" placeholder="Nombre o cédula" autocomplete="off">
-              </div>
-              <div id="resMedFE" class="list-group"></div>
-              <div id="infoMedFE" class="mt-3 d-none alert"></div>
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-              <button type="button" id="confMedFE" class="btn btn-primary" disabled>Aceptar</button>
-            </div>
-          </div>
-        </div>
-      </div>`;
-      document.body.insertAdjacentHTML('beforeend', html);
-    }
-
-    const modalEl = document.getElementById(modalId);
-    const modal = new bootstrap.Modal(modalEl);
-    modal.show();
-
-    const $input = document.getElementById('buscaMedFE');
-    const $res   = document.getElementById('resMedFE');
-    const $info  = document.getElementById('infoMedFE');
-    const $btn   = document.getElementById('confMedFE');
-
-    let tt=null;
-    $input.addEventListener('input', function () {
-      const q = this.value.trim();
-      $res.innerHTML = '';
-      $info.classList.add('d-none'); $info.textContent=''; $btn.disabled=true;
-      if (tt) clearTimeout(tt);
-      if (q.length < 2) return;
-      tt = setTimeout(()=>{
-        fetch(`{{ route('medicos.buscar') }}?q=`+encodeURIComponent(q))
-          .then(r=>r.json()).then(data=>{
-            $res.innerHTML='';
-            if (!Array.isArray(data) || data.length===0) { $res.innerHTML='<div class="list-group-item">No se encontraron médicos.</div>'; return; }
-            data.forEach(it=>{
-              const firmaOk = !!it.firma;
-              const btn = document.createElement('button');
-              btn.type='button'; btn.className='list-group-item list-group-item-action d-flex justify-content-between align-items-center';
-              btn.innerHTML = `<span>${it.label}</span>${firmaOk?'<span class="badge bg-success ms-2">Firma OK</span>':'<span class="badge bg-danger ms-2">Sin firma</span>'}`;
-              btn.addEventListener('click', function(){
-                medicoSeleccionado = { cedula: it.cedula, nombre: it.label, firma: firmaOk };
-                if (firmaOk) {
-                  $info.classList.remove('d-none'); $info.classList.remove('alert-danger'); $info.classList.add('alert-success');
-                  $info.innerHTML = `Médico seleccionado: <strong>${it.label}</strong>. Puede buscar fórmulas.`;
-                  $btn.disabled = false;
-                } else {
-                  medicoSeleccionado = null;
-                  $info.classList.remove('d-none'); $info.classList.remove('alert-success'); $info.classList.add('alert-danger');
-                  $info.innerHTML = `El médico <strong>${it.label}</strong> no tiene firma registrada. Falta documentos para realizar pedidos.`;
-                  $btn.disabled = true;
-                }
-              });
-              $res.appendChild(btn);
-            });
-          });
-      },180);
-    });
-
-      $btn.addEventListener('click', function(){
-      if (!medicoSeleccionado) return;
-      // habilitar buscador y botones
-      if (buscador) buscador.disabled = false;
-      if (btnAdd) btnAdd.disabled = true; // remains disabled until user selects a formula
-      modal.hide();
-    });
-  }
-}
 </script>
 <!-- Modal: crear receta para fórmula (usable por botón PDF) -->
 <div class="modal fade" id="modalCrearRecetaFE" tabindex="-1" aria-hidden="true">
@@ -276,6 +178,7 @@ if ({{ auth()->user() && auth()->user()->hasRole(['Visitador']) ? 'true' : 'fals
             <label class="form-label">Buscar médico</label>
             <input type="text" id="buscaMedReceta" class="form-control" placeholder="Nombre o cédula" autocomplete="off">
             <input type="hidden" name="cedula_medico" id="cedula_medico">
+            <div id="medicoStatusReceta" class="form-text text-danger d-none">Debe seleccionar un médico con firma para descargar el PDF.</div>
             <div id="resBuscaMedReceta" class="list-group mt-1" style="max-height:180px; overflow:auto; display:none;"></div>
           </div>
           <div class="mb-2">
@@ -302,6 +205,13 @@ document.addEventListener('DOMContentLoaded', function(){
   const modal = new bootstrap.Modal(modalEl);
   const btnGenerar = document.getElementById('btnGenerarRecetaFE');
   const form = document.getElementById('formCrearRecetaFE');
+  const status = document.getElementById('medicoStatusReceta');
+  let medicoFirmaOk = false;
+  btnGenerar.disabled = true;
+  if (status) {
+    status.classList.add('d-none');
+    status.textContent = '';
+  }
   const errorBox = document.createElement('div');
   errorBox.className = 'alert alert-danger d-none';
   errorBox.id = 'errorRecetaFE';
@@ -315,17 +225,18 @@ document.addEventListener('DOMContentLoaded', function(){
       form.action = `{{ url('formulas/establecidas') }}/${id}/receta`;
       form.reset();
       document.getElementById('receta_formula_display').value = codigo;
+      document.getElementById('buscaMedReceta').value = '';
       document.getElementById('cedula_medico').value = '';
       document.getElementById('resBuscaMedReceta').innerHTML = '';
       document.getElementById('resBuscaMedReceta').style.display = 'none';
       errorBox.classList.add('d-none');
       errorBox.textContent = '';
-      try {
-        if (typeof medicoSeleccionado !== 'undefined' && medicoSeleccionado && medicoSeleccionado.cedula) {
-          document.getElementById('cedula_medico').value = medicoSeleccionado.cedula;
-          document.getElementById('buscaMedReceta').value = medicoSeleccionado.nombre || medicoSeleccionado.cedula;
-        }
-      } catch(e){}
+      if (status) {
+        status.classList.add('d-none');
+        status.textContent = '';
+      }
+      medicoFirmaOk = false;
+      btnGenerar.disabled = true;
       modal.show();
     });
   });
@@ -390,13 +301,22 @@ document.addEventListener('DOMContentLoaded', function(){
   const $input = document.getElementById('buscaMedReceta');
   const $res   = document.getElementById('resBuscaMedReceta');
   const $hidden= document.getElementById('cedula_medico');
+  const $btnGenerar = document.getElementById('btnGenerarRecetaFE');
+  const $status = document.getElementById('medicoStatusReceta');
   if (!$input) return;
   let tt=null;
+  let medicoFirmaOk = false;
+  if ($btnGenerar) $btnGenerar.disabled = true;
+  if ($status) $status.classList.add('d-none');
+
   $input.addEventListener('input', function(){
     const q = this.value.trim();
     $res.innerHTML = '';
     $res.style.display = 'none';
     $hidden.value = '';
+    medicoFirmaOk = false;
+    if ($btnGenerar) $btnGenerar.disabled = true;
+    if ($status) $status.classList.add('d-none');
     if (tt) clearTimeout(tt);
     if (q.length < 2) return;
     tt = setTimeout(()=>{
@@ -413,6 +333,20 @@ document.addEventListener('DOMContentLoaded', function(){
               $hidden.value = it.cedula;
               $input.value = it.label;
               $res.innerHTML=''; $res.style.display='none';
+              medicoFirmaOk = firmaOk;
+              if (!firmaOk) {
+                if ($status) {
+                  $status.textContent = 'El médico seleccionado no tiene firma. No se puede generar el PDF.';
+                  $status.classList.remove('d-none');
+                }
+                if ($btnGenerar) $btnGenerar.disabled = true;
+              } else {
+                if ($status) {
+                  $status.classList.add('d-none');
+                  $status.textContent = '';
+                }
+                if ($btnGenerar) $btnGenerar.disabled = false;
+              }
             });
             $res.appendChild(btn);
           });

@@ -47,10 +47,6 @@
 </head>
 <body>
 
-<div style="font-size:18px; font-weight:700; color:red;">
-  TEST PDF CAMBIO {{ now() }}
-</div>
-
 {{-- ================== ENCABEZADO ================== --}}
 @php
   $centro = trim((string)($medico->centro_medico ?? ''));
