@@ -11,7 +11,7 @@ class RecetasAccess
     {
         $user = Auth::user();
 
-        if (!$user || !in_array($user->rol, ['Admin','Laboratorio'], true)) {
+        if (!$user) {
             abort(403, 'No tienes permisos para acceder a Recetas.');
         }
 

@@ -6,18 +6,26 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\DB; 
 use App\Mail\RecetaCreadaMail;
 use App\Models\Receta;
+use App\Models\RecetaHomeopatico;
+use App\Models\RecetaProducto;
 use App\Models\Formula;
 use App\Models\FormulaItem;
 use App\Models\Medico;
+use App\Models\Producto;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use App\Mail\RecetasLoteMail;
 use Illuminate\Support\Facades\Storage;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class RecetaController extends Controller
 {
     public function index(Request $request)
     {
+        if (! $request->user()?->hasRole(['Admin'])) {
+            abort(403, 'No tienes permisos para ver el listado de recetas.');
+        }
+
         // filtros opcionales
         $q      = trim((string) $request->query('q', ''));
         $desde  = $request->query('desde');
@@ -43,14 +51,32 @@ class RecetaController extends Controller
 
     public function show(Receta $receta)
     {
-        // 1) Traer fórmula por código + sus ítems
-        $formula = Formula::with('items')   // relación hasMany('items') en Formula
-            ->where('codigo', $receta->codigo_formula)
-            ->firstOrFail();
+        if (! request()->user()?->hasRole(['Admin'])) {
+            abort(403, 'No tienes permisos para ver el detalle de recetas.');
+        }
 
-        // 2) Excluir auxiliares (mismo filtro que usas en la etiqueta)
-        $excluir = [70274,70272,70275,70273,1101,1078,1077,1219,70276,70271,71497];
-        $items = $formula->items->filter(fn($it) => !in_array((int)$it->cod_odoo, $excluir))->values();
+        $homeopatico = $receta->homeopatico()->first();
+
+        // Cargar los productos asociados si existen
+        $productos = $receta->productos()->get();
+
+        // Si no hay productos, es una receta tradicional con fórmula
+        if ($productos->isEmpty() && ! $homeopatico) {
+            // 1) Traer fórmula por código + sus ítems
+            $formula = Formula::with('items')   // relación hasMany('items') en Formula
+                ->where('codigo', $receta->codigo_formula)
+                ->first();
+
+            $items = [];
+            if ($formula) {
+                // 2) Excluir auxiliares (mismo filtro que usas en la etiqueta)
+                $excluir = [70274,70272,70275,70273,1101,1078,1077,1219,70276,70271,71497];
+                $items = $formula->items->filter(fn($it) => !in_array((int)$it->cod_odoo, $excluir))->values();
+            }
+        } else {
+            $formula = null;
+            $items = [];
+        }
 
         // 3) Médico por cédula
         $medico = Medico::where('cedula', $receta->cedula_medico)->first();
@@ -70,10 +96,12 @@ class RecetaController extends Controller
             }
         }
 
-        return view('recetas.recetario', [
+        return view('recetas.show', [
             'receta'   => $receta,
-            'formula'  => $formula,
+            'formula'  => $formula ?? null,
             'items'    => $items,
+            'productos' => $productos,
+            'homeopatico' => $homeopatico,
             'medico'   => $medico,
             'firmaUrl' => $firmaUrl,
         ]);
@@ -214,6 +242,45 @@ class RecetaController extends Controller
         }
     }
 
+    private function obtenerFirmaBase64(?Medico $medico): ?string
+    {
+        if (! $medico) {
+            return null;
+        }
+
+        $firmaBase64 = null;
+        if (!empty($medico->firma_path)) {
+            $path = $medico->firma_path;
+            $rel = Str::startsWith($path, 'public/') ? Str::after($path, 'public/') : $path;
+
+            if (Storage::disk('public')->exists($rel)) {
+                $firmaBase64 = base64_encode(Storage::disk('public')->get($rel));
+            }
+
+            if (!$firmaBase64 && file_exists(public_path($path))) {
+                $firmaBase64 = base64_encode(file_get_contents(public_path($path)));
+            }
+
+            if (!$firmaBase64 && Storage::exists($path)) {
+                $firmaBase64 = base64_encode(Storage::get($path));
+            }
+        }
+
+        if (!$firmaBase64) {
+            $probe = 'firmas/'.$medico->cedula.'.png';
+            if (Storage::disk('public')->exists($probe)) {
+                $firmaBase64 = base64_encode(Storage::disk('public')->get($probe));
+            } else {
+                $probe2 = public_path('images/firmas/'.$medico->cedula.'.png');
+                if (file_exists($probe2)) {
+                    $firmaBase64 = base64_encode(file_get_contents($probe2));
+                }
+            }
+        }
+
+        return $firmaBase64;
+    }
+
     private function randomName(): string
     {
         $nombres = [
@@ -251,4 +318,210 @@ class RecetaController extends Controller
                $apellidos[random_int(0, count($apellidos)-1)];
     }
 
+    /**
+     * Mostrar formulario de creación de receta (nueva vista)
+     */
+    public function create()
+    {
+        return view('recetas.crear');
+    }
+
+    public function homeopatico()
+    {
+        return view('recetas.homeopatico');
+    }
+
+    public function storeHomeopatico(Request $request)
+    {
+        $data = $request->validate([
+            'so' => ['required', 'regex:/^\d+$/', 'max:50'],
+            'cedula_medico' => ['required', 'string', 'max:50'],
+            'producto' => ['required', 'string', 'max:255'],
+            'composicion' => ['required', 'string'],
+            'cantidad' => ['required', 'integer', 'min:1', 'max:500'],
+            'paciente' => ['nullable', 'string', 'max:255'],
+            'fecha' => ['required', 'date'],
+        ], [
+            'so.required' => 'Debe ingresar el SO.',
+            'so.regex' => 'El campo SO solo debe contener numeros.',
+            'cedula_medico.required' => 'Debe seleccionar un medico.',
+            'producto.required' => 'Debe ingresar el nombre del producto.',
+            'composicion.required' => 'Debe ingresar la composicion.',
+            'cantidad.required' => 'Debe ingresar la cantidad solicitada.',
+        ]);
+
+        $medico = Medico::where('cedula', $data['cedula_medico'])->first();
+
+        if (! $medico) {
+            return back()->withErrors(['cedula_medico' => 'Medico no encontrado. Seleccione un medico valido.'])->withInput();
+        }
+
+        $cantidadSolicitada = (int) $data['cantidad'];
+        $frascosPorReceta = $this->distribuirFrascosHomeopatico($cantidadSolicitada);
+        $paciente = trim((string) ($data['paciente'] ?? ''));
+        $codigoBase = 'HOM-' . date('YmdHis') . '-' . random_int(1000, 9999);
+        $recetas = [];
+
+        DB::transaction(function () use ($data, $frascosPorReceta, $paciente, $codigoBase, $cantidadSolicitada, &$recetas) {
+            foreach ($frascosPorReceta as $index => $numFrascos) {
+                $nombrePaciente = $cantidadSolicitada === 1 && $paciente !== ''
+                    ? $paciente
+                    : $this->randomName();
+
+                $receta = Receta::create([
+                    'so' => $data['so'],
+                    'codigo_formula' => $codigoBase . '-' . ($index + 1),
+                    'fecha' => $data['fecha'],
+                    'cedula_medico' => $data['cedula_medico'],
+                    'paciente' => $nombrePaciente,
+                    'num_frascos' => $numFrascos,
+                ]);
+
+                $homeopatico = RecetaHomeopatico::create([
+                    'id_receta' => $receta->id_receta,
+                    'producto' => trim($data['producto']),
+                    'composicion' => trim($data['composicion']),
+                    'cantidad_solicitada' => $cantidadSolicitada,
+                ]);
+
+                $recetas[] = [
+                    'receta' => $receta,
+                    'homeopatico' => $homeopatico,
+                ];
+            }
+        });
+
+        $firmaBase64 = $this->obtenerFirmaBase64($medico);
+
+        $pdf = Pdf::loadView('recetas.homeopatico_pdf', [
+            'packs' => $recetas,
+            'medico' => $medico,
+            'firmaBase64' => $firmaBase64,
+        ])->setPaper('a4');
+
+        return $pdf->download('Recetas-Homeopatico-'.$codigoBase.'.pdf');
+    }
+
+    private function distribuirFrascosHomeopatico(int $cantidad): array
+    {
+        if ($cantidad <= 12) {
+            return array_fill(0, $cantidad, 1);
+        }
+
+        $frascos = [];
+        $restantes = $cantidad;
+
+        while ($restantes > 0) {
+            $frascos[] = min(6, $restantes);
+            $restantes -= 6;
+        }
+
+        return $frascos;
+    }
+
+    /**
+     * Buscar productos (AJAX)
+     */
+    public function buscarProductos(Request $request)
+    {
+        $q = trim($request->query('q', ''));
+        
+        if ($q === '') {
+            return response()->json([]);
+        }
+
+        $productos = Producto::query()
+            ->where('nombre', 'like', "%{$q}%")
+            ->orWhere('cod_product', 'like', "%{$q}%")
+            ->orderBy('nombre')
+            ->limit(15)
+            ->get(['cod_product', 'nombre'])
+            ->toArray();
+
+        return response()->json($productos);
+    }
+
+    /**
+     * Guardar nueva receta con productos seleccionados
+     */
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'so' => ['required', 'regex:/^\d+$/', 'max:50'],
+            'cedula_medico' => ['required', 'string', 'max:50'],
+            'productos_seleccionados' => ['required', 'json'],
+            'paciente' => ['nullable', 'string', 'max:255'],
+            'fecha' => ['required', 'date'],
+        ], [
+            'cedula_medico.required' => 'Debe seleccionar un médico.',
+            'productos_seleccionados.required' => 'Debe seleccionar al menos un producto.',
+        ]);
+
+        $productos = json_decode($data['productos_seleccionados'], true);
+        
+        if (empty($productos) || !is_array($productos)) {
+            return back()->withErrors(['productos_seleccionados' => 'Debe seleccionar al menos un producto.']);
+        }
+
+        foreach ($productos as $producto) {
+            if (empty($producto['cod_product']) || empty($producto['nombre'])) {
+                return back()->withErrors(['productos_seleccionados' => 'Todos los productos seleccionados deben ser validos.'])->withInput();
+            }
+        }
+
+        $codigoFormula = 'REC-' . date('YmdHis') . '-' . random_int(1000, 9999);
+        $paciente = trim((string) ($data['paciente'] ?? ''));
+
+        $receta = Receta::create([
+            'so' => $data['so'],
+            'codigo_formula' => $codigoFormula,
+            'fecha' => $data['fecha'],
+            'cedula_medico' => $data['cedula_medico'],
+            'paciente' => $paciente !== '' ? $paciente : $this->randomName(),
+            'num_frascos' => 1,
+        ]);
+
+        foreach ($productos as $producto) {
+            $cantidad = (int) ($producto['cantidad'] ?? 1);
+
+            RecetaProducto::create([
+                'id_receta' => $receta->id_receta,
+                'cod_product' => $producto['cod_product'],
+                'nombre' => $producto['nombre'],
+                'cantidad' => $cantidad > 0 ? $cantidad : 1,
+            ]);
+        }
+
+        $medico = Medico::where('cedula', $data['cedula_medico'])->first();
+
+        if (! $medico) {
+            return back()->withErrors(['cedula_medico' => 'Médico no encontrado. Seleccione un médico válido.'])->withInput();
+        }
+
+        try {
+            if (!empty($medico->correo)) {
+                Mail::to($medico->correo)->send(new RecetaCreadaMail($receta->id_receta));
+            }
+        } catch (\Throwable $e) {
+            // Ignorar errores de correo para no bloquear la descarga
+        }
+
+        $receta->load('productos');
+        $productosReceta = $receta->productos->toArray();
+        $firmaBase64 = $this->obtenerFirmaBase64($medico);
+
+        $pdf = Pdf::loadView('recetas.pdf', [
+            'receta' => $receta,
+            'formula' => null,
+            'items' => collect(),
+            'productos' => $productosReceta,
+            'medico' => $medico,
+            'doctorDisplay' => trim((string)($medico->full_name ?? $medico->nombre ?? $medico->name ?? '')),
+            'firmaBase64' => $firmaBase64,
+        ])->setPaper('a4');
+
+        $fileName = 'Receta-'.$receta->codigo_formula.'-'.$receta->cedula_medico.'.pdf';
+
+        return $pdf->download($fileName);
+    }
 }

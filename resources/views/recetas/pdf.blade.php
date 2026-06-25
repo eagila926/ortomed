@@ -106,49 +106,59 @@
 
 {{-- ================== PRODUCTO ================== --}}
 <div class="mt-3">
-  <div class="label">Producto:</div>
-  <div>
-    {{ $formula->nombre_etiqueta ?? $receta->codigo_formula }}
-  </div>
+  @if(!empty($formula))
+    <div class="label">Producto:</div>
+    <div>
+      {{ $formula->nombre_etiqueta ?? $receta->codigo_formula }}
+    </div>
 
-  <p>
-    <strong>N.º de frascos:</strong> {{ $receta->num_frascos }}
-  </p>
-</div>
+    <p>
+      <strong>N.º de frascos:</strong> {{ $receta->num_frascos }}
+    </p>
 
-{{-- ================== POSOLOGÍA ================== --}}
-@php
-  $tomas = (int) ($formula->tomas_diarias ?? 2);
-@endphp
-
-<div class="mt-3">
-  <div class="label">Posología:</div>
-  <div class="label">
-    TOMAR {{ $tomas }} CÁPSULAS DIARIAS
-  </div>
-</div>
-
-{{-- ================== COMPOSICIÓN ================== --}}
-<div class="mt-3">
-  <div class="label">Composición:</div>
-
-  <table class="comp">
     @php
-      $excluir = [70274,70272,70275,70273,1101,1078,1077,1219,70276,70271,71497];
-      $itemsPdf = collect($items ?? [])
-        ->filter(fn($it) => !in_array((int)($it->cod_odoo ?? 0), $excluir));
+      $tomas = (int) ($formula->tomas_diarias ?? 2);
     @endphp
 
-    @foreach($itemsPdf as $it)
-      <tr>
-        <td>{{ $it->activo }}</td>
-        <td>
-          {{ number_format((float)$it->cantidad, 2) }}
-          {{ $it->unidad ?? 'mg' }}
-        </td>
-      </tr>
-    @endforeach
-  </table>
+    <div class="mt-3">
+      <div class="label">Posología:</div>
+      <div class="label">
+        TOMAR {{ $tomas }} CÁPSULAS DIARIAS
+      </div>
+    </div>
+
+    <div class="mt-3">
+      <div class="label">Composición:</div>
+
+      <table class="comp">
+        @php
+          $excluir = [70274,70272,70275,70273,1101,1078,1077,1219,70276,70271,71497];
+          $itemsPdf = collect($items ?? [])
+            ->filter(fn($it) => !in_array((int)($it->cod_odoo ?? 0), $excluir));
+        @endphp
+
+        @foreach($itemsPdf as $it)
+          <tr>
+            <td>{{ $it->activo }}</td>
+            <td>
+              {{ number_format((float)$it->cantidad, 2) }}
+              {{ $it->unidad ?? 'mg' }}
+            </td>
+          </tr>
+        @endforeach
+      </table>
+    </div>
+  @else
+    <div class="label">Productos Seleccionados:</div>
+    <table class="comp">
+      @foreach(collect($productos ?? []) as $producto)
+        <tr>
+          <td>{{ data_get($producto, 'nombre') }}</td>
+          <td>Cant: {{ data_get($producto, 'cantidad', 1) }}</td>
+        </tr>
+      @endforeach
+    </table>
+  @endif
 </div>
 
 {{-- ================== FIRMA ================== --}}

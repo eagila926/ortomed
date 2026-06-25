@@ -11,7 +11,18 @@
     </div>
   @endif
 
-  <h3 class="mb-3">Recetas</h3>
+  @if (session('success'))
+    <div class="alert alert-success">
+      {{ session('success') }}
+    </div>
+  @endif
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Recetas</h3>
+    <a href="{{ route('recetas.create') }}" class="btn btn-primary">
+      <i class="bi bi-plus-circle"></i> Nueva Receta
+    </a>
+  </div>
 
   <form method="GET" class="row g-2 align-items-end mb-3">
     <div class="col-md-4">

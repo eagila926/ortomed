@@ -31,4 +31,21 @@ class Receta extends Model
             }
         });
     }
+
+    // Relación con productos
+    public function productos()
+    {
+        return $this->hasMany(RecetaProducto::class, 'id_receta', 'id_receta');
+    }
+
+    public function homeopatico()
+    {
+        return $this->hasOne(RecetaHomeopatico::class, 'id_receta', 'id_receta');
+    }
+
+    // Relación con médico
+    public function medico()
+    {
+        return $this->belongsTo(Medico::class, 'cedula_medico', 'cedula');
+    }
 }

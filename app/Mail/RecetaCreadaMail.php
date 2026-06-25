@@ -26,6 +26,7 @@ class RecetaCreadaMail extends Mailable
         $formula = Formula::with('items')->where('codigo', $receta->codigo_formula)->first();
         $items   = $formula?->items ?? collect();
         $medico  = Medico::where('cedula', $receta->cedula_medico)->first();
+        $productos = $receta->productos()->get();
 
         // === Nombre DR/A con fallbacks
         $doctorDisplay = '';
@@ -83,9 +84,10 @@ class RecetaCreadaMail extends Mailable
             'receta'        => $receta,
             'formula'       => $formula,
             'items'         => $items,
+            'productos'     => $productos,
             'medico'        => $medico,
-            'doctorDisplay' => $doctorDisplay, // <—
-            'firmaBase64'   => $firmaBase64,   // <—
+            'doctorDisplay' => $doctorDisplay,
+            'firmaBase64'   => $firmaBase64,
         ])->setPaper('a4');
 
         $nombreAdj = 'Receta-'.$receta->codigo_formula.'-SO'.$receta->so.'.pdf';

@@ -133,8 +133,15 @@ Route::middleware('auth')->group(function () {
     | - Laboratorio
     */
     Route::middleware(RecetasAccess::class)->group(function () {
-        Route::post('/recetas', [RecetaController::class, 'storeMultiple'])->name('recetas.store');
+        Route::post('/recetas', [RecetaController::class, 'storeMultiple'])->name('recetas.storeMultiple');
         Route::get('/recetas/{receta}/enviar-mail', [RecetaController::class, 'testEnviarMail'])->name('recetas.testMail');
+
+        // Nueva vista: crear receta con productos
+        Route::get('/recetas/crear', [RecetaController::class, 'create'])->name('recetas.create');
+        Route::get('/recetas/buscar-productos', [RecetaController::class, 'buscarProductos'])->name('recetas.buscarProductos');
+        Route::post('/recetas/guardar', [RecetaController::class, 'store'])->name('recetas.store');
+        Route::get('/recetas/homeopatico', [RecetaController::class, 'homeopatico'])->name('recetas.homeopatico');
+        Route::post('/recetas/homeopatico', [RecetaController::class, 'storeHomeopatico'])->name('recetas.homeopatico.store');
 
         Route::get('/recetas', [RecetaController::class, 'index'])->name('recetas.index');
         Route::get('/recetas/{receta}', [RecetaController::class, 'show'])

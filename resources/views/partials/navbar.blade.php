@@ -63,12 +63,27 @@
           </li>
         @endif
 
-        {{-- Recetas: Admin, Laboratorio --}}
-        @if($user && $user->hasRole(['Admin','Laboratorio']))
-          <li class="nav-item">
-            <a class="nav-link {{ request()->routeIs('recetas.*') ? 'fw-semibold' : '' }}" href="{{ route('recetas.index') }}">
+        {{-- Recetas: todos los usuarios autenticados --}}
+        @if($user)
+          <li class="nav-item dropdown">
+            <a class="nav-link dropdown-toggle {{ request()->routeIs('recetas.*') ? 'fw-semibold' : '' }}"
+               href="#" role="button" data-bs-toggle="dropdown">
               <i class="bi bi-journal-text"></i> Recetas
             </a>
+            <ul class="dropdown-menu">
+              <li>
+                <a class="dropdown-item {{ request()->routeIs('recetas.create') ? 'active' : '' }}"
+                   href="{{ route('recetas.create') }}">
+                  Recetas Producto terminado
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item {{ request()->routeIs('recetas.homeopatico') ? 'active' : '' }}"
+                   href="{{ route('recetas.homeopatico') }}">
+                  Recetas Homeopático
+                </a>
+              </li>
+            </ul>
           </li>
         @endif
 
