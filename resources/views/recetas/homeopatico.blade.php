@@ -314,7 +314,20 @@
         return;
       }
 
-      setTimeout(limpiarFormularioHomeopatico, 500);
+      e.preventDefault();
+      const form = this;
+      const btnGenerar = document.getElementById('btnGenerar');
+      btnGenerar.disabled = true;
+
+      window.submitPdfFormWithPublicLinks(form, {
+        defaultFilename: 'recetas-homeopatico.pdf',
+        errorMessage: 'No se pudo generar las recetas.'
+      }).then(() => {
+        limpiarFormularioHomeopatico();
+      }).catch(err => {
+        alert(err.message || 'No se pudo generar las recetas.');
+        validarFormulario();
+      });
     });
 
     actualizarResumenRecetas();

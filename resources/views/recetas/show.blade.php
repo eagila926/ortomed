@@ -4,7 +4,16 @@
 
 @section('content')
 <div class="container py-3">
-  <a href="{{ route('recetas.index') }}" class="btn btn-link">&larr; Volver</a>
+  @if (empty($publicView))
+    <a href="{{ route('recetas.index') }}" class="btn btn-link">&larr; Volver</a>
+  @else
+    <div class="alert alert-info d-flex flex-column flex-md-row gap-2 justify-content-between align-items-md-center">
+      <div>Enlace público de la receta</div>
+      <a href="{{ url()->current() }}" target="_blank" rel="noopener" class="btn btn-sm btn-primary">
+        Abrir enlace
+      </a>
+    </div>
+  @endif
 
   <div class="card mb-4">
     <div class="card-header"><strong>Receta #{{ $receta->id_receta }}</strong></div>

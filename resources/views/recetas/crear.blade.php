@@ -448,6 +448,30 @@
         alert('Debe ingresar el SO');
         return false;
       }
+
+      e.preventDefault();
+      const form = this;
+      const btnGenerar = document.getElementById('btnGenerar');
+      btnGenerar.disabled = true;
+
+      window.submitPdfFormWithPublicLinks(form, {
+        defaultFilename: 'receta.pdf',
+        errorMessage: 'No se pudo generar la receta.'
+      }).then(() => {
+        productosSeleccionados = [];
+        medicoSeleccionado = null;
+        productoSeleccionado = null;
+        form.reset();
+        document.getElementById('cedula_medico').value = '';
+        document.getElementById('productosSeleccionados').value = '[]';
+        document.getElementById('doctor-info').style.display = 'none';
+        document.getElementById('firma-status').innerHTML = '';
+        actualizarTablaProductos();
+        validarFormulario();
+      }).catch(err => {
+        alert(err.message || 'No se pudo generar la receta.');
+        validarFormulario();
+      });
     });
 
     document.getElementById('resultados-medicos').addEventListener('click', function(e) {

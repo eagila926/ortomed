@@ -382,29 +382,18 @@ class FormulasEstController extends Controller
 
         $createdIds = [];
         $fechaReceta = now()->subDays(2)->toDateString();
+        $frascosPorReceta = $this->distribuirFrascosReceta($n);
 
-        if ($n <= 1) {
+        foreach ($frascosPorReceta as $index => $numFrascos) {
             $r = Receta::create([
                 'so'             => $data['so'],
                 'codigo_formula' => $f->codigo,
                 'fecha'          => $fechaReceta,
                 'cedula_medico'  => $data['cedula_medico'],
-                'paciente'       => $data['paciente'] ?? '',
-                'num_frascos'    => 1,
+                'paciente'       => $n === 1 ? ($data['paciente'] ?? '') : $this->randomName(),
+                'num_frascos'    => $numFrascos,
             ]);
             $createdIds[] = $r->getKey();
-        } else {
-            for ($i = 0; $i < $n; $i++) {
-                $r = Receta::create([
-                    'so'             => $data['so'],
-                    'codigo_formula' => $f->codigo,
-                    'fecha'          => $fechaReceta,
-                    'cedula_medico'  => $data['cedula_medico'],
-                    'paciente'       => $this->randomName(),
-                    'num_frascos'    => 1,
-                ]);
-                $createdIds[] = $r->getKey();
-            }
         }
 
         // Si se creó una sola receta, retornar PDF simple
@@ -425,7 +414,7 @@ class FormulasEstController extends Controller
             return response($pdf->output(), 200, [
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'attachment; filename="'.$filename.'"',
-            ]);
+            ] + $this->publicRecipeLinksHeader($createdIds));
         }
 
         // Si se crearon varias recetas, generar PDF multipágina
@@ -457,7 +446,41 @@ class FormulasEstController extends Controller
         return response($pdf->output(), 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',
-        ]);
+        ] + $this->publicRecipeLinksHeader($createdIds));
+    }
+
+    private function publicRecipeLinksHeader(array $recetaIds): array
+    {
+        $links = collect($recetaIds)
+            ->filter()
+            ->unique()
+            ->values()
+            ->map(fn ($id) => [
+                'id' => (int) $id,
+                'url' => route('recetas.public.show', ['receta' => $id]),
+            ])
+            ->all();
+
+        return [
+            'X-Receta-Public-Links' => base64_encode(json_encode($links)),
+        ];
+    }
+
+    private function distribuirFrascosReceta(int $cantidad): array
+    {
+        if ($cantidad <= 12) {
+            return array_fill(0, max(1, $cantidad), 1);
+        }
+
+        $frascos = [];
+        $restantes = $cantidad;
+
+        while ($restantes > 0) {
+            $frascos[] = min(6, $restantes);
+            $restantes -= 6;
+        }
+
+        return $frascos;
     }
 
     private function randomName(): string

@@ -145,7 +145,7 @@
     </div>
 
     <p>
-      <strong>Duracion de tratamiento 30 días</strong>
+      <strong>N.º de frascos:</strong> {{ $receta->num_frascos ?? 1 }}
     </p>
   </div>
 

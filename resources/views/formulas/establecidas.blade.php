@@ -244,52 +244,16 @@ document.addEventListener('DOMContentLoaded', function(){
   btnGenerar.addEventListener('click', function(){
     errorBox.classList.add('d-none');
     errorBox.textContent = '';
-    const formData = new FormData(form);
-    const url = form.action;
     btnGenerar.disabled = true;
-    fetch(url, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest'
-      }
-    }).then(async response => {
+    window.submitPdfFormWithPublicLinks(form, {
+      defaultFilename: 'receta.pdf',
+      errorMessage: 'Error al generar la receta.'
+    }).then(() => {
       btnGenerar.disabled = false;
-      const contentType = response.headers.get('Content-Type') || '';
-      if (!response.ok || !contentType.includes('application/pdf')) {
-        const text = await response.text();
-        let message = 'Error al generar la receta.';
-        try {
-          const json = JSON.parse(text);
-          const errors = json.errors || {};
-          message = Object.values(errors).flat().join(' ') || json.message || message;
-        } catch(e) {
-          message = text || message;
-        }
-        errorBox.textContent = message;
-        errorBox.classList.remove('d-none');
-        return;
-      }
-      const blob = await response.blob();
-      const contentDisposition = response.headers.get('Content-Disposition') || '';
-      const filenameMatch = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(contentDisposition);
-      let filename = 'receta.pdf';
-      if (filenameMatch) filename = decodeURIComponent(filenameMatch[1] || filenameMatch[2]);
-      if (window.navigator && window.navigator.msSaveOrOpenBlob) {
-        window.navigator.msSaveOrOpenBlob(blob, filename);
-      } else {
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
-      }
       modal.hide();
     }).catch(err => {
       btnGenerar.disabled = false;
-      errorBox.textContent = 'No se pudo generar el PDF. Intente otra vez.';
+      errorBox.textContent = err.message || 'No se pudo generar el PDF. Intente otra vez.';
       errorBox.classList.remove('d-none');
     });
   });

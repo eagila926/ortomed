@@ -55,6 +55,16 @@ class RecetaController extends Controller
             abort(403, 'No tienes permisos para ver el detalle de recetas.');
         }
 
+        return view('recetas.show', $this->recetaViewData($receta, false));
+    }
+
+    public function publicShow(Receta $receta)
+    {
+        return view('recetas.public', $this->recetaViewData($receta, true));
+    }
+
+    private function recetaViewData(Receta $receta, bool $publicView = false): array
+    {
         $homeopatico = $receta->homeopatico()->first();
 
         // Cargar los productos asociados si existen
@@ -96,7 +106,7 @@ class RecetaController extends Controller
             }
         }
 
-        return view('recetas.show', [
+        return [
             'receta'   => $receta,
             'formula'  => $formula ?? null,
             'items'    => $items,
@@ -104,7 +114,29 @@ class RecetaController extends Controller
             'homeopatico' => $homeopatico,
             'medico'   => $medico,
             'firmaUrl' => $firmaUrl,
-        ]);
+            'firmaBase64' => $this->obtenerFirmaBase64($medico),
+            'publicView' => $publicView,
+        ];
+    }
+
+    private function publicRecipeLinks(array $recetaIds): array
+    {
+        return collect($recetaIds)
+            ->filter()
+            ->unique()
+            ->values()
+            ->map(fn ($id) => [
+                'id' => (int) $id,
+                'url' => route('recetas.public.show', ['receta' => $id]),
+            ])
+            ->all();
+    }
+
+    private function publicRecipeLinksHeader(array $recetaIds): array
+    {
+        return [
+            'X-Receta-Public-Links' => base64_encode(json_encode($this->publicRecipeLinks($recetaIds))),
+        ];
     }
     public function storeMultiple(Request $request)
     {
@@ -215,6 +247,7 @@ class RecetaController extends Controller
         $back = $data['redirect_to'] ?? url()->previous();
         return redirect($back)->with([
             'recetas_guardadas' => $numRecetas,
+            'receta_public_links' => $this->publicRecipeLinks($creadasIds),
             'etiqueta_preview'  => [
                 'so'      => $so,
                 'medico'  => $medicoNombre,
@@ -399,7 +432,11 @@ class RecetaController extends Controller
             'firmaBase64' => $firmaBase64,
         ])->setPaper('a4');
 
-        return $pdf->download('Recetas-Homeopatico-'.$codigoBase.'.pdf');
+        $recetaIds = collect($recetas)->pluck('receta.id_receta')->all();
+
+        return $pdf
+            ->download('Recetas-Homeopatico-'.$codigoBase.'.pdf')
+            ->withHeaders($this->publicRecipeLinksHeader($recetaIds));
     }
 
     private function distribuirFrascosHomeopatico(int $cantidad): array
@@ -498,14 +535,6 @@ class RecetaController extends Controller
             return back()->withErrors(['cedula_medico' => 'Médico no encontrado. Seleccione un médico válido.'])->withInput();
         }
 
-        try {
-            if (!empty($medico->correo)) {
-                Mail::to($medico->correo)->send(new RecetaCreadaMail($receta->id_receta));
-            }
-        } catch (\Throwable $e) {
-            // Ignorar errores de correo para no bloquear la descarga
-        }
-
         $receta->load('productos');
         $productosReceta = $receta->productos->toArray();
         $firmaBase64 = $this->obtenerFirmaBase64($medico);
@@ -522,6 +551,8 @@ class RecetaController extends Controller
 
         $fileName = 'Receta-'.$receta->codigo_formula.'-'.$receta->cedula_medico.'.pdf';
 
-        return $pdf->download($fileName);
+        return $pdf
+            ->download($fileName)
+            ->withHeaders($this->publicRecipeLinksHeader([$receta->id_receta]));
     }
 }
