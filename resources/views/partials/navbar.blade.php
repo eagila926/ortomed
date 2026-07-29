@@ -72,12 +72,6 @@
             </a>
             <ul class="dropdown-menu">
               <li>
-                <a class="dropdown-item {{ request()->routeIs('recetas.create') ? 'active' : '' }}"
-                   href="{{ route('recetas.create') }}">
-                  Recetas Producto terminado
-                </a>
-              </li>
-              <li>
                 <a class="dropdown-item {{ request()->routeIs('recetas.homeopatico') ? 'active' : '' }}"
                    href="{{ route('recetas.homeopatico') }}">
                   Recetas Homeopático
@@ -181,6 +175,7 @@
               <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.martinez') }}">Martínez-Biolosmed</a></li>
               <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.julisa') }}">Dra. Julisa</a></li>
               <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.balance') }}">Dra Viteri</a></li>
+              <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.viteri_elaborado') }}">Dra Viteri Elaborado</a></li>
               <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.mesalbuda') }}">Mesalbuda</a></li>
               <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.editable') }}">Editable</a></li>
               <li><a class="dropdown-item" target="_blank" rel="noopener noreferrer" href="{{ route('etiquetas_especiales.naturmed') }}">Naturmed</a></li>

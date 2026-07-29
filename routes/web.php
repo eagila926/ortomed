@@ -208,6 +208,7 @@ Route::middleware('auth')->group(function () {
             Route::view('/martinez',  'etiquetas_especiales.martinez')->name('martinez');
             Route::view('/julisa',    'etiquetas_especiales.julisa')->name('julisa');
             Route::view('/balance',   'etiquetas_especiales.balance')->name('balance');
+            Route::view('/viteri_elaborado',   'etiquetas_especiales.viteri_elaborado')->name('viteri_elaborado');
             Route::view('/mesalbuda', 'etiquetas_especiales.mesalbuda')->name('mesalbuda');
             Route::view('/editable',  'etiquetas_especiales.editable')->name('editable');
             Route::view('/naturmed', 'etiquetas_especiales.naturmed')->name('naturmed');

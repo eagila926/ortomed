@@ -125,6 +125,8 @@
     .col-12 {
         width: 100%;
         box-sizing: border-box;
+        margin-top: -15px;
+        
     }
 
     .col-6 {
@@ -135,7 +137,7 @@
     .header {
         text-align: center;
         font-weight: bold;
-        margin-top: 50px;
+    
         margin-bottom: 5px;
     }
 
@@ -732,7 +734,7 @@
 
   <script>
     // ---------- Apertura del modal ----------
-    const mustOpen = {{ session()->has('recetas_guardadas') ? 'false' : 'true' }};
+    const mustOpen = false;
     const dlg = document.getElementById('dlg-recetas');
 
     if (mustOpen && dlg && !dlg.open) dlg.showModal();
@@ -943,6 +945,47 @@
                     CÁPSULAS DIARIAS
                 </strong>
             </div>
+            
+            <div style="display:flex; justify-content:flex-end; margin-top:-60px;">
+
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                    
+                            <div style="display:flex; align-items:center; gap:8px;">
+                    
+                                <svg width="45" height="60" viewBox="0 0 300 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Frasco vacío con tapa abierta">
+                                              <g fill="none" stroke="#000" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M75 78 C115 45, 220 35, 245 48 C252 52, 252 60, 244 66 C198 88, 120 104, 82 97 C74 95, 69 84, 75 78Z"/>
+                                                <path d="M78 97 L84 124 C88 135, 200 113, 244 75 L245 48"/>
+                                                <path d="M92 98 L96 126"/>
+                                                <path d="M108 97 L113 124"/>
+                                                <path d="M124 94 L130 121"/>
+                                                <path d="M140 91 L147 118"/>
+                                                <path d="M156 87 L164 114"/>
+                                                <path d="M173 83 L181 110"/>
+                                                <path d="M190 78 L198 105"/>
+                                                <path d="M207 73 L215 99"/>
+                                                <path d="M224 67 L232 93"/>
+                                                <ellipse cx="165" cy="130" rx="92" ry="24"/>
+                                                <path d="M73 130 C75 154, 255 154, 257 130"/>
+                                                <path d="M75 151 C75 176, 255 176, 255 151"/>
+                                                <path d="M82 151 C86 167, 79 177, 70 184"/>
+                                                <path d="M248 151 C244 167, 252 177, 260 184"/>
+                                                <path d="M70 184 C50 200, 45 220, 45 250 L45 322 C45 365, 72 382, 115 382 L215 382 C255 382, 280 360, 280 322 L280 250 C280 220, 276 200, 260 184"/>
+                                                <path d="M82 207 C65 220, 60 238, 60 270"/>
+                                                <path d="M95 226 C84 238, 80 252, 80 285"/>
+                                                <path d="M60 323 C60 350, 72 368, 98 375"/>
+                                                <path d="M78 348 C95 370, 125 374, 170 374"/>
+                                                <path d="M82 158 C92 164, 105 165, 118 165"/>
+                                              </g>
+                                            </svg>
+                    
+                                <strong style="font-size:20px;">60 días</strong>
+                    
+                            </div>
+                    
+                        </div>
+                    
+                    </div>
         </div>
     </div>
 
@@ -966,6 +1009,8 @@
                         SO{{ $soPrefill ? $soPrefill : '' }}
                     </strong>
                 </div>
+                
+                
             </div>
         </div>
     </div>

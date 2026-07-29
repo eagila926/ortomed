@@ -369,7 +369,7 @@
 
   <script>
     // ---------- Apertura del modal ----------
-    const mustOpen = {{ session()->has('recetas_guardadas') ? 'false' : 'true' }};
+    const mustOpen = false;
     const dlg = document.getElementById('dlg-recetas');
 
     if (mustOpen && dlg && !dlg.open) dlg.showModal();
@@ -573,7 +573,6 @@
 
             <strong>SO.</strong>
             <div class="editable so" contenteditable="true">
-                  SO.@if($soPrefill) {{ ' ' . $soPrefill }} @endif
                 </div>
           </div>
         </div>

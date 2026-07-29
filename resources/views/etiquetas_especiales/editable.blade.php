@@ -448,7 +448,7 @@
 
 @if($canRecetas)
 <script>
-  const mustOpen = {{ session()->has('recetas_guardadas') ? 'false' : 'true' }};
+  const mustOpen = false;
   const dlg = document.getElementById('dlg-recetas');
 
   if (mustOpen && dlg && !dlg.open) dlg.showModal();
