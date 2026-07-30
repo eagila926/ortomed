@@ -13,9 +13,16 @@
         <div class="alert alert-success mb-3">
           El PDF se descargo. Estos enlaces pueden abrirse sin iniciar sesion.
         </div>
-        <div id="recetaPublicLinksList" class="list-group"></div>
+        <label for="recetaPublicLinksText" class="form-label fw-semibold">
+          <span id="recetaPublicLinksCount"></span>
+        </label>
+        <textarea id="recetaPublicLinksText" class="form-control" rows="7" readonly></textarea>
+        <div class="form-text">Cada enlace corresponde a una receta y aparece en una línea separada.</div>
       </div>
       <div class="modal-footer">
+        <button type="button" class="btn btn-primary" id="btnCopyAllRecetaLinks">
+          <i class="bi bi-clipboard me-1"></i> Copiar todos
+        </button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
       </div>
     </div>
@@ -40,30 +47,16 @@
     if (!Array.isArray(links) || links.length === 0) return;
 
     const modalEl = document.getElementById('modalRecetaPublicLinks');
-    const listEl = document.getElementById('recetaPublicLinksList');
-    if (!modalEl || !listEl) return;
+    const textEl = document.getElementById('recetaPublicLinksText');
+    const countEl = document.getElementById('recetaPublicLinksCount');
+    const urls = links.map(link => link.url || '').filter(Boolean);
+    if (!modalEl || !textEl || urls.length === 0) return;
 
-    listEl.innerHTML = '';
-    links.forEach((link, index) => {
-      const recetaId = link.id || (index + 1);
-      const url = link.url || '';
-      if (!url) return;
-
-      const item = document.createElement('div');
-      item.className = 'list-group-item';
-      item.innerHTML = `
-        <div class="d-flex flex-column flex-lg-row gap-2 align-items-lg-center justify-content-between">
-          <div class="flex-grow-1">
-            <strong>Receta #${recetaId}</strong>
-            <input type="text" class="form-control form-control-sm mt-1" value="${url}" readonly>
-          </div>
-          <div class="d-flex gap-2">
-            <a class="btn btn-sm btn-primary" href="${url}" target="_blank" rel="noopener">Abrir</a>
-            <button type="button" class="btn btn-sm btn-outline-secondary" data-copy-url="${url}">Copiar</button>
-          </div>
-        </div>`;
-      listEl.appendChild(item);
-    });
+    textEl.value = urls.join('\n');
+    textEl.rows = Math.min(Math.max(urls.length, 3), 12);
+    if (countEl) {
+      countEl.textContent = `${urls.length} enlace${urls.length === 1 ? '' : 's'} público${urls.length === 1 ? '' : 's'}`;
+    }
 
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
   };
@@ -120,6 +113,29 @@
   };
 
   document.addEventListener('click', function(e) {
+    const copyAllBtn = e.target.closest('#btnCopyAllRecetaLinks');
+    if (copyAllBtn) {
+      const textEl = document.getElementById('recetaPublicLinksText');
+      const texto = textEl?.value || '';
+      if (!texto) return;
+
+      const copiar = navigator.clipboard?.writeText
+        ? navigator.clipboard.writeText(texto)
+        : new Promise((resolve, reject) => {
+            textEl.focus();
+            textEl.select();
+            document.execCommand('copy') ? resolve() : reject();
+          });
+
+      copiar.then(() => {
+        copyAllBtn.innerHTML = '<i class="bi bi-check2 me-1"></i> Copiados';
+        setTimeout(() => {
+          copyAllBtn.innerHTML = '<i class="bi bi-clipboard me-1"></i> Copiar todos';
+        }, 1500);
+      });
+      return;
+    }
+
     const copyBtn = e.target.closest('[data-copy-url]');
     if (!copyBtn) return;
 

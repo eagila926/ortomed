@@ -13,6 +13,7 @@ use App\Http\Controllers\PedidoFormulaController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\ActivoController;
+use App\Http\Controllers\FormulaHomeoController;
 
 use App\Http\Middleware\ProduccionAccess;
 use App\Http\Middleware\PedidosAccess;
@@ -109,6 +110,20 @@ Route::middleware('auth')->group(function () {
 
             // Cargar ítems de una fórmula a activo_temps para edición
             Route::get('/{id}/editar', [FormulaController::class, 'cargarParaEditar'])->name('editar.cargar');
+        });
+
+        Route::prefix('formulas-homeopaticas')->name('formulas-homeo.')->group(function () {
+            Route::get('/nueva', [FormulaHomeoController::class, 'index'])->name('nueva');
+            Route::get('/establecidas', [FormulaHomeoController::class, 'establecidas'])->name('establecidas');
+            Route::get('/buscar-activos', [FormulaHomeoController::class, 'buscar'])->name('buscar');
+            Route::get('/items', [FormulaHomeoController::class, 'listar'])->name('listar');
+            Route::post('/items', [FormulaHomeoController::class, 'agregar'])->name('agregar');
+            Route::delete('/items/{item}', [FormulaHomeoController::class, 'eliminar'])->name('eliminar');
+            Route::delete('/items', [FormulaHomeoController::class, 'limpiar'])->name('limpiar');
+            Route::post('/cancelar-edicion', [FormulaHomeoController::class, 'cancelarEdicion'])->name('cancelar-edicion');
+            Route::get('/{formula}/editar', [FormulaHomeoController::class, 'editar'])->name('editar');
+            Route::post('/{formula}/receta', [FormulaHomeoController::class, 'receta'])->name('receta');
+            Route::post('/', [FormulaHomeoController::class, 'guardar'])->name('guardar');
         });
 
         // Formulas establecidas

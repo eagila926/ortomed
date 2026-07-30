@@ -58,6 +58,17 @@
             <ul class="dropdown-menu">
               <li><a class="dropdown-item" href="{{ route('fe.index') }}">Fórmulas Establecidas</a></li>
               <li><a class="dropdown-item" href="{{ route('formulas.nuevas') }}">Fórmulas Nuevas</a></li>
+              <li>
+                <a class="dropdown-item {{ request()->routeIs('formulas-homeo.*') ? 'active' : '' }}"
+                   href="{{ route('formulas-homeo.nueva') }}">
+                  Fórmulas Nuevas Homeopáticas
+                </a>
+              </li>
+              <li>
+                <a class="dropdown-item" href="{{ route('formulas-homeo.establecidas') }}">
+                  Fórmulas Establecidas Homeopáticas
+                </a>
+              </li>
               <li><a class="dropdown-item" href="{{ route('formulas.recientes') }}">Fórmulas Recientes</a></li>
             </ul>
           </li>
