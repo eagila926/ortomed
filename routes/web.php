@@ -115,6 +115,11 @@ Route::middleware('auth')->group(function () {
         Route::prefix('formulas-homeopaticas')->name('formulas-homeo.')->group(function () {
             Route::get('/nueva', [FormulaHomeoController::class, 'index'])->name('nueva');
             Route::get('/establecidas', [FormulaHomeoController::class, 'establecidas'])->name('establecidas');
+            Route::get('/establecidas/buscar', [FormulaHomeoController::class, 'buscarEstablecidas'])->name('establecidas.buscar');
+            Route::post('/establecidas/agregar', [FormulaHomeoController::class, 'agregarEstablecida'])->name('establecidas.agregar');
+            Route::delete('/establecidas/limpiar', [FormulaHomeoController::class, 'limpiarEstablecidas'])->name('establecidas.limpiar');
+            Route::delete('/establecidas/{formula}', [FormulaHomeoController::class, 'quitarEstablecida'])->name('establecidas.quitar');
+            Route::post('/establecidas/recetas', [FormulaHomeoController::class, 'recetasSeleccionadas'])->name('establecidas.recetas');
             Route::get('/buscar-activos', [FormulaHomeoController::class, 'buscar'])->name('buscar');
             Route::get('/items', [FormulaHomeoController::class, 'listar'])->name('listar');
             Route::post('/items', [FormulaHomeoController::class, 'agregar'])->name('agregar');

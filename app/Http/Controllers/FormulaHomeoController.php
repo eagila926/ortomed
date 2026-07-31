@@ -19,6 +19,8 @@ use Illuminate\Validation\Rule;
 
 class FormulaHomeoController extends Controller
 {
+    private const SESSION_SELECCION = 'formulas_homeo_seleccionadas';
+
     private const PRESENTACIONES = [
         'Gotero 22 ml',
         'Gotero 50 ml',
@@ -36,19 +38,20 @@ class FormulaHomeoController extends Controller
             ->orderBy('categoria')
             ->pluck('categoria');
 
-        $formulaEditando = null;
-        $formulaEditandoId = session('formula_homeo_editando');
-        if ($formulaEditandoId) {
-            $formulaEditando = FormulaHomeo::find($formulaEditandoId);
-            if (!$formulaEditando) {
-                session()->forget('formula_homeo_editando');
+        $formulaBase = null;
+        $formulaBaseId = session('formula_homeo_base');
+        if ($formulaBaseId) {
+            $formulaBase = FormulaHomeo::find($formulaBaseId);
+            if (!$formulaBase) {
+                session()->forget('formula_homeo_base');
             }
         }
 
         return view('formulas_homeo.nueva', [
             'categorias' => $categorias,
             'presentaciones' => self::PRESENTACIONES,
-            'formulaEditando' => $formulaEditando,
+            'formulaEditando' => $formulaBase,
+            'esCopia' => (bool) $formulaBase,
         ]);
     }
 
@@ -129,12 +132,21 @@ class FormulaHomeoController extends Controller
                 'max:100',
                 Rule::exists('activos_homeo', 'categoria'),
             ],
+            'medico' => ['required', 'string', 'max:150'],
+            'cedula_medico' => ['required', 'string', 'max:50', 'exists:medicos,cedula'],
             'presentacion' => ['required', Rule::in(self::PRESENTACIONES)],
         ]);
 
         $userId = (int) Auth::id();
-        $data['medico'] = '';
-        $data['cedula_medico'] = null;
+        $medico = Medico::where('cedula', $data['cedula_medico'])->first();
+        if (!$medico || !$medico->firma) {
+            return back()
+                ->withErrors([
+                    'cedula_medico' => 'Debe seleccionar un médico que tenga firma registrada.',
+                ])
+                ->withInput();
+        }
+        $data['medico'] = $medico->full_name;
         $temporales = ActivoHomeoTemp::where('user_id', $userId)
             ->orderBy('id')
             ->get();
@@ -145,27 +157,18 @@ class FormulaHomeoController extends Controller
                 ->withInput();
         }
 
-        $formulaEditandoId = session('formula_homeo_editando');
-
         $formula = DB::transaction(function () use (
             $data,
             $temporales,
-            $userId,
-            $formulaEditandoId
+            $userId
         ) {
-            if ($formulaEditandoId) {
-                $formula = FormulaHomeo::lockForUpdate()->findOrFail($formulaEditandoId);
-                $formula->update($data);
-                FormulaHomeoItem::where('codigo', $formula->codigo)->delete();
-            } else {
-                $codigo = $this->generarCodigo();
-                $formula = FormulaHomeo::create([
-                    ...$data,
-                    'codigo' => $codigo,
-                    'user_id' => $userId,
-                    'precio' => 0,
-                ]);
-            }
+            $codigo = $this->generarCodigo();
+            $formula = FormulaHomeo::create([
+                ...$data,
+                'codigo' => $codigo,
+                'user_id' => $userId,
+                'precio' => 0,
+            ]);
 
             FormulaHomeoItem::insert(
                 $temporales->map(fn ($item) => [
@@ -183,7 +186,7 @@ class FormulaHomeoController extends Controller
             return $formula;
         });
 
-        session()->forget('formula_homeo_editando');
+        session()->forget(['formula_homeo_editando', 'formula_homeo_base']);
 
         return redirect()
             ->route('formulas-homeo.nueva')
@@ -207,19 +210,71 @@ class FormulaHomeoController extends Controller
 
     public function establecidas(Request $request)
     {
-        $q = trim((string) $request->query('q', ''));
-        $formulas = FormulaHomeo::with('items')
-            ->when($q !== '', function ($query) use ($q) {
-                $query->where(function ($sub) use ($q) {
-                    $sub->where('codigo', 'like', "%{$q}%")
-                        ->orWhere('nombre_etiqueta', 'like', "%{$q}%");
-                });
-            })
-            ->orderByDesc('id')
-            ->paginate(20)
-            ->withQueryString();
+        $ids = collect(session(self::SESSION_SELECCION, []))->map(fn ($id) => (int) $id);
+        $formulas = $ids->isEmpty()
+            ? collect()
+            : FormulaHomeo::with('items')
+                ->whereIn('id', $ids)
+                ->get()
+                ->sortBy(fn ($formula) => $ids->search($formula->id))
+                ->values();
 
-        return view('formulas_homeo.establecidas', compact('formulas', 'q'));
+        return view('formulas_homeo.establecidas', [
+            'formulas' => $formulas,
+            'presentaciones' => self::PRESENTACIONES,
+        ]);
+    }
+
+    public function buscarEstablecidas(Request $request)
+    {
+        $data = $request->validate([
+            'q' => ['required', 'string', 'min:1', 'max:150'],
+        ]);
+        $q = trim($data['q']);
+
+        return response()->json(
+            FormulaHomeo::query()
+                ->where(function ($query) use ($q) {
+                    $query->where('codigo', 'like', "%{$q}%")
+                        ->orWhere('nombre_etiqueta', 'like', "%{$q}%")
+                        ->orWhere('categoria', 'like', "%{$q}%");
+                })
+                ->orderByDesc('id')
+                ->limit(15)
+                ->get(['id', 'codigo', 'nombre_etiqueta', 'categoria', 'presentacion'])
+        );
+    }
+
+    public function agregarEstablecida(Request $request)
+    {
+        $data = $request->validate([
+            'formula_id' => ['required', 'integer', 'exists:formulas_homeo,id'],
+        ]);
+        $ids = collect(session(self::SESSION_SELECCION, []));
+        if (!$ids->contains((int) $data['formula_id'])) {
+            $ids->push((int) $data['formula_id']);
+        }
+        session([self::SESSION_SELECCION => $ids->values()->all()]);
+
+        return redirect()->route('formulas-homeo.establecidas');
+    }
+
+    public function quitarEstablecida(FormulaHomeo $formula)
+    {
+        $ids = collect(session(self::SESSION_SELECCION, []))
+            ->reject(fn ($id) => (int) $id === (int) $formula->id)
+            ->values()
+            ->all();
+        session([self::SESSION_SELECCION => $ids]);
+
+        return redirect()->route('formulas-homeo.establecidas');
+    }
+
+    public function limpiarEstablecidas()
+    {
+        session()->forget(self::SESSION_SELECCION);
+
+        return redirect()->route('formulas-homeo.establecidas');
     }
 
     public function editar(FormulaHomeo $formula)
@@ -240,14 +295,15 @@ class FormulaHomeoController extends Controller
             }
         });
 
-        session(['formula_homeo_editando' => $formula->id]);
+        session()->forget('formula_homeo_editando');
+        session(['formula_homeo_base' => $formula->id]);
 
         return redirect()->route('formulas-homeo.nueva');
     }
 
     public function cancelarEdicion()
     {
-        session()->forget('formula_homeo_editando');
+        session()->forget(['formula_homeo_editando', 'formula_homeo_base']);
         ActivoHomeoTemp::where('user_id', Auth::id())->delete();
 
         return redirect()->route('formulas-homeo.nueva');
@@ -335,16 +391,156 @@ class FormulaHomeoController extends Controller
             ->withHeaders($this->publicRecipeLinksHeader($recetaIds));
     }
 
+    public function recetasSeleccionadas(Request $request)
+    {
+        $data = $request->validate([
+            'so' => ['required', 'regex:/^\d+$/', 'max:50'],
+            'presentacion' => ['required', Rule::in(self::PRESENTACIONES)],
+            'cedula_medico' => ['nullable', 'string', 'max:50', 'exists:medicos,cedula'],
+            'paciente' => ['nullable', 'string', 'max:255'],
+            'cantidades' => ['required', 'array'],
+            'cantidades.*' => ['required', 'integer', 'min:1', 'max:500'],
+        ], [
+            'so.regex' => 'El campo SO solo debe contener números.',
+        ]);
+
+        $ids = collect(session(self::SESSION_SELECCION, []))->map(fn ($id) => (int) $id);
+        $formulas = FormulaHomeo::with('items')->whereIn('id', $ids)->get()
+            ->sortBy(fn ($formula) => $ids->search($formula->id))
+            ->values();
+
+        if ($formulas->isEmpty()) {
+            return response()->json([
+                'message' => 'Selecciona al menos una fórmula.',
+                'errors' => ['formulas' => ['Selecciona al menos una fórmula.']],
+            ], 422);
+        }
+
+        $medicoReemplazo = null;
+        if (!empty($data['cedula_medico'])) {
+            $medicoReemplazo = Medico::where('cedula', $data['cedula_medico'])->first();
+            if (!$medicoReemplazo?->firma) {
+                return response()->json([
+                    'message' => 'El médico de reemplazo debe tener firma registrada.',
+                    'errors' => ['cedula_medico' => ['El médico de reemplazo debe tener firma registrada.']],
+                ], 422);
+            }
+        }
+
+        $medicos = [];
+        foreach ($formulas as $formula) {
+            if (!array_key_exists((string) $formula->id, $data['cantidades']) &&
+                !array_key_exists($formula->id, $data['cantidades'])) {
+                return response()->json([
+                    'message' => "Indica la cantidad para la fórmula {$formula->codigo}.",
+                    'errors' => ['cantidades' => ["Falta la cantidad de {$formula->codigo}."]],
+                ], 422);
+            }
+            $medico = $medicoReemplazo ?: Medico::where('cedula', $formula->cedula_medico)->first();
+            if (!$medico?->firma) {
+                return response()->json([
+                    'message' => "La fórmula {$formula->codigo} no tiene un médico con firma. Selecciona un médico para reemplazarlo.",
+                    'errors' => ['cedula_medico' => ["La fórmula {$formula->codigo} requiere un médico con firma."]],
+                ], 422);
+            }
+            $medicos[$formula->id] = $medico;
+        }
+
+        $packs = [];
+        $recetaIds = [];
+        $pacienteAsignado = false;
+        DB::transaction(function () use (
+            $data,
+            $formulas,
+            $medicos,
+            &$packs,
+            &$recetaIds,
+            &$pacienteAsignado
+        ) {
+            foreach ($formulas as $formula) {
+                $medico = $medicos[$formula->id];
+                $cantidadTotal = (int) $data['cantidades'][$formula->id];
+                $composicion = $formula->items->map(fn ($item) => trim(
+                    $item->activo.($item->dilusion !== '' ? ' '.$item->dilusion : '')
+                ))->implode("\n");
+                $grupos = [];
+                for ($restantes = $cantidadTotal; $restantes > 0; $restantes -= 6) {
+                    $grupos[] = min(6, $restantes);
+                }
+
+                foreach ($grupos as $indice => $numFrascos) {
+                    $pacienteIngresado = trim((string) ($data['paciente'] ?? ''));
+                    $nombrePaciente = !$pacienteAsignado && $pacienteIngresado !== ''
+                        ? $pacienteIngresado
+                        : $this->randomName();
+                    if (!$pacienteAsignado && $pacienteIngresado !== '') {
+                        $pacienteAsignado = true;
+                    }
+
+                    $receta = Receta::create([
+                        'so' => $data['so'],
+                        'codigo_formula' => $formula->codigo.'-'.($indice + 1),
+                        'fecha' => now()->toDateString(),
+                        'cedula_medico' => $medico->cedula,
+                        'paciente' => $nombrePaciente,
+                        'num_frascos' => $numFrascos,
+                    ]);
+
+                    $homeopatico = RecetaHomeopatico::create([
+                        'id_receta' => $receta->id_receta,
+                        'producto' => $formula->nombre_etiqueta.' - '.$data['presentacion'],
+                        'composicion' => $composicion,
+                        'cantidad_solicitada' => $cantidadTotal,
+                    ]);
+
+                    $packs[] = [
+                        'receta' => $receta,
+                        'homeopatico' => $homeopatico,
+                        'medico' => $medico,
+                        'firmaBase64' => $this->firmaBase64($medico),
+                    ];
+                    $recetaIds[] = $receta->id_receta;
+                }
+            }
+        });
+
+        session()->forget(self::SESSION_SELECCION);
+
+        $pdf = Pdf::loadView('recetas.homeopatico_pdf', [
+            'packs' => $packs,
+            'medico' => $packs[0]['medico'],
+            'firmaBase64' => $packs[0]['firmaBase64'],
+        ])->setPaper('a4');
+
+        return $pdf
+            ->download('Recetas-Homeopaticas-'.now()->format('Ymd-His').'.pdf')
+            ->withHeaders($this->publicRecipeLinksHeader($recetaIds));
+    }
+
     private function publicRecipeLinksHeader(array $recetaIds): array
     {
+        $recetas = Receta::with('homeopatico')
+            ->whereIn('id_receta', $recetaIds)
+            ->get()
+            ->keyBy('id_receta');
+
         $links = collect($recetaIds)
             ->filter()
             ->unique()
             ->values()
-            ->map(fn ($id) => [
-                'id' => (int) $id,
-                'url' => route('recetas.public.show', ['receta' => $id]),
-            ])
+            ->map(function ($id) use ($recetas) {
+                $receta = $recetas->get($id);
+                $producto = trim((string) ($receta?->homeopatico?->producto ?? ''));
+                $nombre = $producto !== ''
+                    ? trim(Str::before($producto, ' - '))
+                    : (string) ($receta?->codigo_formula ?? 'Receta');
+
+                return [
+                    'id' => (int) $id,
+                    'nombre' => $nombre,
+                    'url' => route('recetas.public.show', ['receta' => $id]),
+                ];
+            })
             ->all();
 
         return [
@@ -362,5 +558,21 @@ class FormulaHomeoController extends Controller
 
         $imagen = public_path('images/firmas/'.$medico->cedula.'.png');
         return file_exists($imagen) ? base64_encode(file_get_contents($imagen)) : null;
+    }
+
+    private function randomName(): string
+    {
+        $nombres = [
+            'Juan', 'María', 'Pedro', 'Luisa', 'Carlos', 'Ana', 'Jorge', 'Sofía',
+            'Diego', 'Daniela', 'Andrés', 'Valeria', 'Miguel', 'Camila', 'Felipe',
+            'Fernanda', 'Pablo', 'Paola', 'Ricardo', 'Andrea', 'José', 'Laura',
+        ];
+        $apellidos = [
+            'García', 'Rodríguez', 'Martínez', 'López', 'González', 'Pérez',
+            'Sánchez', 'Ramírez', 'Torres', 'Flores', 'Vargas', 'Castro',
+            'Rojas', 'Moreno', 'Guerrero', 'Mendoza', 'Ortega', 'Navarro',
+        ];
+
+        return $nombres[array_rand($nombres)].' '.$apellidos[array_rand($apellidos)];
     }
 }

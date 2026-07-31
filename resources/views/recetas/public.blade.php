@@ -162,6 +162,11 @@
       <strong>N.º de frascos:</strong> {{ $receta->num_frascos }}
     </div>
 
+    <div class="mt-2">
+      <strong>Duración del tratamiento:</strong>
+      {{ $receta->num_frascos }} {{ (int) $receta->num_frascos === 1 ? 'mes' : 'meses' }}
+    </div>
+
     <div class="mt-3">
       <div class="label">Composición:</div>
       <div class="box">{{ $homeopatico->composicion }}</div>

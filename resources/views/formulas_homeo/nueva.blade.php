@@ -23,7 +23,7 @@
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
   <div>
     <h2 class="h4 mb-1">
-      {{ $formulaEditando ? 'Editar '.$formulaEditando->codigo : 'Nueva fórmula homeopática' }}
+      {{ $formulaEditando ? 'Nueva fórmula basada en '.$formulaEditando->codigo : 'Nueva fórmula homeopática' }}
     </h2>
     <p class="text-muted mb-0">Selecciona los activos, la presentación y registra la cotización.</p>
   </div>
@@ -31,7 +31,7 @@
     @if($formulaEditando)
       <form method="POST" action="{{ route('formulas-homeo.cancelar-edicion') }}">
         @csrf
-        <button class="btn btn-outline-secondary btn-sm">Cancelar edición</button>
+        <button class="btn btn-outline-secondary btn-sm">Cancelar copia</button>
       </form>
     @endif
     <span class="badge text-bg-primary fs-6" id="contadorActivos">0 activos</span>
@@ -135,6 +135,28 @@
         </div>
 
         <div class="mb-3">
+          <label for="medicoCotizacion" class="form-label">Médico</label>
+          <div class="position-relative">
+            <input type="search" class="form-control" id="medicoCotizacion" name="medico"
+                   value="{{ old('medico', $formulaEditando?->medico) }}"
+                   placeholder="Buscar por nombre o cédula" maxlength="150"
+                   autocomplete="off" required>
+            <input type="hidden" id="cedulaMedicoCotizacion" name="cedula_medico"
+                   value="{{ old('cedula_medico', $formulaEditando?->cedula_medico) }}" required>
+            <div id="resultadosMedicosCotizacion"
+                 class="list-group position-absolute w-100 shadow d-none"
+                 style="z-index:1060; max-height:230px; overflow-y:auto;"></div>
+          </div>
+          <div class="form-text" id="estadoMedicoCotizacion">
+            @if(old('cedula_medico', $formulaEditando?->cedula_medico))
+              Médico seleccionado · Cédula: {{ old('cedula_medico', $formulaEditando?->cedula_medico) }}
+            @else
+              Selecciona un médico con firma registrada.
+            @endif
+          </div>
+        </div>
+
+        <div class="mb-3">
           <label for="presentacion" class="form-label">Presentación</label>
           <select class="form-select" id="presentacion" name="presentacion" required>
             <option value="">Selecciona una presentación</option>
@@ -148,7 +170,7 @@
 
         <button type="submit" class="btn btn-success btn-lg w-100" id="guardarCotizacion" disabled>
           <i class="bi bi-check2-circle me-1"></i>
-          {{ $formulaEditando ? 'Guardar cambios' : 'Guardar fórmula' }}
+          Guardar como fórmula nueva
         </button>
       </div>
     </form>
@@ -165,6 +187,7 @@
     agregar: @json(route('formulas-homeo.agregar')),
     limpiar: @json(route('formulas-homeo.limpiar')),
     eliminarBase: @json(url('/formulas-homeopaticas/items')),
+    medicos: @json(route('medicos.buscar')),
   };
   const csrf = document.querySelector('meta[name="csrf-token"]').content;
   const buscar = document.getElementById('buscarActivoHomeo');
@@ -178,6 +201,13 @@
   const mensaje = document.getElementById('mensajeModulo');
   let activoSeleccionado = null;
   let temporizador;
+  let temporizadorMedico;
+  let cantidadItems = 0;
+
+  function actualizarGuardar() {
+    guardar.disabled = cantidadItems === 0 ||
+      document.getElementById('cedulaMedicoCotizacion').value === '';
+  }
 
   function avisar(texto, tipo = 'success') {
     mensaje.className = `alert alert-${tipo}`;
@@ -211,8 +241,9 @@
   async function cargarItems() {
     try {
       const items = await peticion(urls.listar);
+      cantidadItems = items.length;
       contador.textContent = `${items.length} ${items.length === 1 ? 'activo' : 'activos'}`;
-      guardar.disabled = items.length === 0;
+      actualizarGuardar();
       if (!items.length) {
         tabla.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Aún no has seleccionado activos.</td></tr>';
         return;
@@ -221,7 +252,7 @@
         <tr>
           <td class="fw-semibold">${escapar(item.activo)}</td>
           <td>${escapar(item.activo_homeo?.categoria || '—')}</td>
-          <td>${escapar(item.dilusion || 'Sin dilución')}</td>
+          <td>${escapar(item.dilusion || '')}</td>
           <td class="text-end">
             <button type="button" class="btn btn-sm btn-outline-danger" data-eliminar="${item.id}">
               <i class="bi bi-trash"></i>
@@ -326,6 +357,77 @@
 
   document.addEventListener('click', event => {
     if (!event.target.closest('.homeo-search')) resultados.classList.add('d-none');
+  });
+
+  const medicoInput = document.getElementById('medicoCotizacion');
+  const cedulaMedico = document.getElementById('cedulaMedicoCotizacion');
+  const resultadosMedicos = document.getElementById('resultadosMedicosCotizacion');
+  const estadoMedico = document.getElementById('estadoMedicoCotizacion');
+
+  medicoInput.addEventListener('input', () => {
+    cedulaMedico.value = '';
+    actualizarGuardar();
+    estadoMedico.className = 'form-text';
+    estadoMedico.textContent = 'Selecciona un médico con firma registrada.';
+    clearTimeout(temporizadorMedico);
+    const q = medicoInput.value.trim();
+    if (!q) {
+      resultadosMedicos.classList.add('d-none');
+      return;
+    }
+
+    temporizadorMedico = setTimeout(async () => {
+      try {
+        const medicos = await peticion(`${urls.medicos}?q=${encodeURIComponent(q)}`);
+        resultadosMedicos.innerHTML = medicos.length
+          ? medicos.map(medico => `
+              <button type="button" class="list-group-item list-group-item-action"
+                      data-medico-cedula="${escapar(medico.cedula)}"
+                      data-medico-nombre="${escapar(medico.label)}"
+                      data-medico-firma="${medico.firma ? '1' : '0'}">
+                <div class="d-flex justify-content-between gap-2">
+                  <span>
+                    <strong>${escapar(medico.label)}</strong>
+                    <small class="d-block text-muted">Cédula: ${escapar(medico.cedula)}</small>
+                  </span>
+                  <span class="badge ${medico.firma ? 'text-bg-success' : 'text-bg-danger'} align-self-center">
+                    ${medico.firma ? 'Con firma' : 'Sin firma'}
+                  </span>
+                </div>
+              </button>`).join('')
+          : '<div class="list-group-item text-muted">No se encontraron médicos.</div>';
+        resultadosMedicos.classList.remove('d-none');
+      } catch (error) {
+        avisar(error.message, 'danger');
+      }
+    }, 250);
+  });
+
+  resultadosMedicos.addEventListener('click', event => {
+    const opcion = event.target.closest('[data-medico-cedula]');
+    if (!opcion) return;
+    medicoInput.value = opcion.dataset.medicoNombre;
+    resultadosMedicos.classList.add('d-none');
+
+    if (opcion.dataset.medicoFirma !== '1') {
+      cedulaMedico.value = '';
+      estadoMedico.className = 'form-text text-danger';
+      estadoMedico.textContent = 'Este médico no tiene firma registrada y no puede agregarse a la fórmula.';
+      actualizarGuardar();
+      return;
+    }
+
+    cedulaMedico.value = opcion.dataset.medicoCedula;
+    estadoMedico.className = 'form-text text-success';
+    estadoMedico.textContent = `Médico válido · Cédula: ${opcion.dataset.medicoCedula}`;
+    actualizarGuardar();
+  });
+
+  document.addEventListener('click', event => {
+    if (!event.target.closest('#medicoCotizacion') &&
+        !event.target.closest('#resultadosMedicosCotizacion')) {
+      resultadosMedicos.classList.add('d-none');
+    }
   });
 
   cargarItems();

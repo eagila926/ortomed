@@ -101,6 +101,11 @@
 
           <dt class="col-sm-3">Frascos en esta receta</dt>
           <dd class="col-sm-9">{{ $receta->num_frascos }}</dd>
+
+          <dt class="col-sm-3">Duración del tratamiento</dt>
+          <dd class="col-sm-9">
+            {{ $receta->num_frascos }} {{ (int) $receta->num_frascos === 1 ? 'mes' : 'meses' }}
+          </dd>
         </dl>
       </div>
     </div>

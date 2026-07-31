@@ -49,13 +49,15 @@
     const modalEl = document.getElementById('modalRecetaPublicLinks');
     const textEl = document.getElementById('recetaPublicLinksText');
     const countEl = document.getElementById('recetaPublicLinksCount');
-    const urls = links.map(link => link.url || '').filter(Boolean);
-    if (!modalEl || !textEl || urls.length === 0) return;
+    const lineas = links
+      .filter(link => link.url)
+      .map(link => `${link.nombre || `Receta #${link.id || ''}`}: ${link.url}`);
+    if (!modalEl || !textEl || lineas.length === 0) return;
 
-    textEl.value = urls.join('\n');
-    textEl.rows = Math.min(Math.max(urls.length, 3), 12);
+    textEl.value = lineas.join('\n');
+    textEl.rows = Math.min(Math.max(lineas.length, 3), 12);
     if (countEl) {
-      countEl.textContent = `${urls.length} enlace${urls.length === 1 ? '' : 's'} público${urls.length === 1 ? '' : 's'}`;
+      countEl.textContent = `${lineas.length} enlace${lineas.length === 1 ? '' : 's'} público${lineas.length === 1 ? '' : 's'}`;
     }
 
     bootstrap.Modal.getOrCreateInstance(modalEl).show();

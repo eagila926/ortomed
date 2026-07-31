@@ -27,17 +27,16 @@
 </style>
 </head>
 <body>
-@php
-  $centro = trim((string)($medico->centro_medico ?? ''));
-  $nombre = trim((string)($medico->full_name ?? ''));
-  $dir    = trim((string)($medico->direccion ?? ''));
-  $tel    = trim((string)($medico->telefono ?? ''));
-@endphp
-
 @foreach($packs as $pack)
   @php
     $receta = $pack['receta'];
     $homeopatico = $pack['homeopatico'];
+    $medicoPack = $pack['medico'] ?? $medico;
+    $firmaPack = $pack['firmaBase64'] ?? ($firmaBase64 ?? null);
+    $centro = trim((string)($medicoPack->centro_medico ?? ''));
+    $nombre = trim((string)($medicoPack->full_name ?? ''));
+    $dir    = trim((string)($medicoPack->direccion ?? ''));
+    $tel    = trim((string)($medicoPack->telefono ?? ''));
   @endphp
 
   <div class="page">
@@ -90,14 +89,19 @@
       <strong>N.º de frascos:</strong> {{ $receta->num_frascos }}
     </div>
 
+    <div class="mt-2">
+      <strong>Duración del tratamiento:</strong>
+      {{ $receta->num_frascos }} {{ (int) $receta->num_frascos === 1 ? 'mes' : 'meses' }}
+    </div>
+
     <div class="mt-3">
       <div class="label">Composición:</div>
       <div class="box">{{ $homeopatico->composicion }}</div>
     </div>
 
     <div class="firma-box">
-      @if(!empty($firmaBase64 ?? null))
-        <img class="firma-img" src="data:image/png;base64,{{ $firmaBase64 }}" alt="Firma">
+      @if(!empty($firmaPack))
+        <img class="firma-img" src="data:image/png;base64,{{ $firmaPack }}" alt="Firma">
       @endif
 
       <div class="mt-2">---------------------</div>
