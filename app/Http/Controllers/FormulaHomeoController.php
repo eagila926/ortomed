@@ -188,9 +188,18 @@ class FormulaHomeoController extends Controller
 
         session()->forget(['formula_homeo_editando', 'formula_homeo_base']);
 
+        // La fórmula recién cotizada se agrega al inicio de Fórmulas establecidas.
+        $ids = collect(session(self::SESSION_SELECCION, []))
+            ->reject(fn ($id) => (int) $id === (int) $formula->id)
+            ->prepend((int) $formula->id)
+            ->values()
+            ->all();
+        session([self::SESSION_SELECCION => $ids]);
+
         return redirect()
-            ->route('formulas-homeo.nueva')
-            ->with('ok', "Fórmula {$formula->codigo} guardada correctamente.");
+            ->route('formulas-homeo.establecidas')
+            ->with('ok', "Fórmula {$formula->codigo} guardada y añadida a Fórmulas establecidas.")
+            ->with('ultima_formula_homeo_id', $formula->id);
     }
 
     private function generarCodigo(): string
@@ -239,6 +248,7 @@ class FormulaHomeoController extends Controller
                         ->orWhere('nombre_etiqueta', 'like', "%{$q}%")
                         ->orWhere('categoria', 'like', "%{$q}%");
                 })
+                ->orderByRaw("CASE WHEN codigo LIKE 'FP-HOMEO%' THEN 0 ELSE 1 END")
                 ->orderByDesc('id')
                 ->limit(15)
                 ->get(['id', 'codigo', 'nombre_etiqueta', 'categoria', 'presentacion'])

@@ -83,7 +83,7 @@
               $item->activo.($item->dilusion !== '' ? ' '.$item->dilusion : '')
             ))->implode("\n");
           @endphp
-          <tr>
+          <tr @class(['table-success' => (int) session('ultima_formula_homeo_id') === (int) $formula->id])>
             <td>
               <div class="fw-semibold">{{ $formula->codigo }}</div>
               <small class="text-muted">{{ $formula->nombre_etiqueta }} · {{ $formula->categoria }}</small>
