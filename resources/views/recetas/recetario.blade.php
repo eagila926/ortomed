@@ -10,6 +10,10 @@
   $pac    = $receta->paciente;
   $prod   = $formula->nombre_etiqueta ?? $formula->nombre ?? $formula->codigo;
   $tomas  = (int)($formula->tomas_diarias ?? 1);
+  $esFormulaSobres = str_starts_with(strtoupper((string) ($formula->codigo ?? '')), 'SFO');
+  $itemsReceta = collect($items ?? [])->reject(
+    fn ($item) => $esFormulaSobres && in_array((int) ($item->cod_odoo ?? 0), [70256, 70277, 70299], true)
+  );
 @endphp
 <!doctype html>
 <html lang="es">
@@ -59,18 +63,21 @@
 <div style="margin-top:16px">
   <div class="label">Producto:</div>
   <div style="margin-top:2px">{{ $prod }}</div>
-  <p><strong>N.º de frascos:</strong> {{ $receta->num_frascos }}</p>
+  <p><strong>N.º de {{ $esFormulaSobres ? 'cajas' : 'frascos' }}:</strong> {{ $receta->num_frascos }}</p>
+  @if($esFormulaSobres)
+    <p><strong>Duración del tratamiento:</strong> {{ $receta->num_frascos }} {{ (int) $receta->num_frascos === 1 ? 'mes' : 'meses' }}</p>
+  @endif
 </div>
 
 <div style="margin-top:16px">
   <div class="label">Posología:</div>
-  <div class="poso" style="margin-top:6px">TOMAR {{ $tomas }} CÁPSULAS DIARIAS</div>
+  <div class="poso" style="margin-top:6px">{{ $esFormulaSobres ? 'TOMAR 1 SOBRE DIARIO' : "TOMAR {$tomas} CÁPSULAS DIARIAS" }}</div>
 </div>
 
 <div style="margin-top:22px">
   <div class="label">Composición:</div>
   <div class="grid" style="margin-top:10px">
-    @foreach($items as $it)
+    @foreach($itemsReceta as $it)
       <div style="font-weight:600">{{ $it->activo }}</div>
       <div style="text-align:right">{{ nf($it->cantidad) }} {{ $it->unidad ?? 'mg' }}</div>
     @endforeach

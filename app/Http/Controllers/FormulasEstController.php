@@ -382,7 +382,11 @@ class FormulasEstController extends Controller
 
         $createdIds = [];
         $fechaReceta = now()->subDays(2)->toDateString();
-        $frascosPorReceta = $this->distribuirFrascosReceta($n);
+        // Las fórmulas en sobres se prescriben como un solo tratamiento en cajas.
+        $esFormulaSobres = str_starts_with(strtoupper((string) $f->codigo), 'SFO');
+        $frascosPorReceta = $esFormulaSobres
+            ? [$n]
+            : $this->distribuirFrascosReceta($n);
 
         foreach ($frascosPorReceta as $index => $numFrascos) {
             $r = Receta::create([
@@ -390,7 +394,9 @@ class FormulasEstController extends Controller
                 'codigo_formula' => $f->codigo,
                 'fecha'          => $fechaReceta,
                 'cedula_medico'  => $data['cedula_medico'],
-                'paciente'       => $n === 1 ? ($data['paciente'] ?? '') : $this->randomName(),
+                'paciente'       => ($esFormulaSobres || $n === 1)
+                    ? ($data['paciente'] ?? '')
+                    : $this->randomName(),
                 'num_frascos'    => $numFrascos,
             ]);
             $createdIds[] = $r->getKey();

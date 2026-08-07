@@ -107,14 +107,24 @@
 {{-- ================== PRODUCTO ================== --}}
 <div class="mt-3">
   @if(!empty($formula))
+    @php
+      $esFormulaSobres = str_starts_with(strtoupper((string) ($formula->codigo ?? '')), 'SFO');
+    @endphp
     <div class="label">Producto:</div>
     <div>
       {{ $formula->nombre_etiqueta ?? $receta->codigo_formula }}
     </div>
 
     <p>
-      <strong>N.º de frascos:</strong> {{ $receta->num_frascos }}
+      <strong>N.º de {{ $esFormulaSobres ? 'cajas' : 'frascos' }}:</strong> {{ $receta->num_frascos }}
     </p>
+
+    @if($esFormulaSobres)
+      <p>
+        <strong>Duración del tratamiento:</strong>
+        {{ $receta->num_frascos }} {{ (int) $receta->num_frascos === 1 ? 'mes' : 'meses' }}
+      </p>
+    @endif
 
     @php
       $tomas = (int) ($formula->tomas_diarias ?? 2);
@@ -123,7 +133,7 @@
     <div class="mt-3">
       <div class="label">Posología:</div>
       <div class="label">
-        TOMAR {{ $tomas }} CÁPSULAS DIARIAS
+        {{ $esFormulaSobres ? 'TOMAR 1 SOBRE DIARIO' : "TOMAR {$tomas} CÁPSULAS DIARIAS" }}
       </div>
     </div>
 
@@ -133,6 +143,9 @@
       <table class="comp">
         @php
           $excluir = [70274,70272,70275,70273,1101,1078,1077,1219,70276,70271,71497];
+          if ($esFormulaSobres) {
+            $excluir = array_merge($excluir, [70256, 70277, 70299]);
+          }
           $itemsPdf = collect($items ?? [])
             ->filter(fn($it) => !in_array((int)($it->cod_odoo ?? 0), $excluir));
         @endphp

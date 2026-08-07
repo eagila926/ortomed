@@ -85,9 +85,13 @@
 
     // Posología
     $tomas = (int) (data_get($formula, 'tomas_diarias', 2));
+    $esFormulaSobres = str_starts_with(strtoupper((string) data_get($formula, 'codigo', '')), 'SFO');
 
     // Excluir auxiliares
     $excluir = [70274,70272,70275,70273,1101,1078,1077,1219,70276,70271,71497];
+    if ($esFormulaSobres) {
+      $excluir = array_merge($excluir, [70256, 70277, 70299]);
+    }
     $itemsPdf = $items->filter(fn($it) => !in_array((int) data_get($it, 'cod_odoo', 0), $excluir))->values();
   @endphp
 
@@ -145,15 +149,21 @@
     </div>
 
     <p>
-      <strong>N.º de frascos:</strong> {{ $receta->num_frascos ?? 1 }}
+      <strong>N.º de {{ $esFormulaSobres ? 'cajas' : 'frascos' }}:</strong> {{ $receta->num_frascos ?? 1 }}
     </p>
+    @if($esFormulaSobres)
+      <p>
+        <strong>Duración del tratamiento:</strong>
+        {{ $receta->num_frascos ?? 1 }} {{ (int) ($receta->num_frascos ?? 1) === 1 ? 'mes' : 'meses' }}
+      </p>
+    @endif
   </div>
 
   {{-- ================== POSOLOGÍA ================== --}}
   <div class="mt-3">
     <div class="label">Posología:</div>
     <div class="label">
-      TOMAR {{ $tomas }} CÁPSULAS DIARIAS
+      {{ $esFormulaSobres ? 'TOMAR 1 SOBRE DIARIO' : "TOMAR {$tomas} CÁPSULAS DIARIAS" }}
     </div>
   </div>
 
