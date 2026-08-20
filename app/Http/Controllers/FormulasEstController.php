@@ -334,6 +334,7 @@ class FormulasEstController extends Controller
         ]);
 
         $n = (int) ($data['num_frascos'] ?? 1);
+        $pacienteIngresado = trim((string) ($data['paciente'] ?? ''));
 
         // Verificar médico en BD
         $medico = Medico::where('cedula', $data['cedula_medico'])->first();
@@ -395,7 +396,7 @@ class FormulasEstController extends Controller
                 'fecha'          => $fechaReceta,
                 'cedula_medico'  => $data['cedula_medico'],
                 'paciente'       => ($esFormulaSobres || $n === 1)
-                    ? ($data['paciente'] ?? '')
+                    ? ($pacienteIngresado !== '' ? $pacienteIngresado : $this->randomName())
                     : $this->randomName(),
                 'num_frascos'    => $numFrascos,
             ]);
